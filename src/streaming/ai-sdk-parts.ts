@@ -37,14 +37,34 @@ export class StreamToAiSdkParts {
   private readonly tracker = new DeltaTracker();
   private readonly toolArgsById = new Map<string, string>();
   private readonly startedToolIds = new Set<string>();
+  private sawAssistantPartials = false;
+  private sawThinkingPartials = false;
 
   handleEvent(event: StreamJsonEvent): AiSdkStreamPart[] {
     if (isAssistantText(event)) {
+      const isPartial = typeof (event as any).timestamp_ms === "number";
+      if (isPartial) {
+        this.sawAssistantPartials = true;
+        const text = extractText(event);
+        return text ? [{ type: "text-delta", textDelta: text }] : [];
+      }
+      if (this.sawAssistantPartials) {
+        return [];
+      }
       const delta = this.tracker.nextText(extractText(event));
       return delta ? [{ type: "text-delta", textDelta: delta }] : [];
     }
 
     if (isThinking(event)) {
+      const isPartial = typeof (event as any).timestamp_ms === "number";
+      if (isPartial) {
+        this.sawThinkingPartials = true;
+        const text = extractThinking(event);
+        return text ? [{ type: "text-delta", textDelta: text }] : [];
+      }
+      if (this.sawThinkingPartials) {
+        return [];
+      }
       const delta = this.tracker.nextThinking(extractThinking(event));
       return delta ? [{ type: "text-delta", textDelta: delta }] : [];
     }

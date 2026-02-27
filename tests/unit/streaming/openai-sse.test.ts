@@ -103,4 +103,133 @@ describe("openai-sse", () => {
 
     expect(parseChunk(second[0]).choices[0].delta.reasoning_content).toBe(" the problem");
   });
+
+  it("does not duplicate text when partial (timestamp_ms) events are followed by final accumulated event", () => {
+    const converter = new StreamToSseConverter("test-model", {
+      id: "chunk-id",
+      created: 123,
+    });
+    const now = Date.now();
+
+    // Simulate real cursor-acp protocol: events with timestamp_ms carry delta text
+    const first = converter.handleEvent({
+      type: "assistant",
+      timestamp_ms: now + 1,
+      message: {
+        role: "assistant",
+        content: [{ type: "text", text: "Hello" }],
+      },
+    } as any);
+
+    expect(first).toHaveLength(1);
+    expect(parseChunk(first[0]).choices[0].delta.content).toBe("Hello");
+
+    const second = converter.handleEvent({
+      type: "assistant",
+      timestamp_ms: now + 2,
+      message: {
+        role: "assistant",
+        content: [{ type: "text", text: " world" }],
+      },
+    } as any);
+
+    expect(second).toHaveLength(1);
+    expect(parseChunk(second[0]).choices[0].delta.content).toBe(" world");
+
+    // Final accumulated event (no timestamp_ms) with full text — should be skipped
+    const final = converter.handleEvent({
+      type: "assistant",
+      message: {
+        role: "assistant",
+        content: [{ type: "text", text: "Hello world" }],
+      },
+    });
+
+    expect(final).toEqual([]);
+  });
+
+  it("does not duplicate thinking when partial (timestamp_ms) events are followed by final accumulated event", () => {
+    const converter = new StreamToSseConverter("test-model", {
+      id: "chunk-id",
+      created: 123,
+    });
+    const now = Date.now();
+
+    // Thinking events with timestamp_ms carry delta text
+    const first = converter.handleEvent({
+      type: "assistant",
+      timestamp_ms: now + 1,
+      message: {
+        role: "assistant",
+        content: [{ type: "thinking", thinking: "Let me think" }],
+      },
+    } as any);
+
+    expect(first).toHaveLength(1);
+    expect(parseChunk(first[0]).choices[0].delta.reasoning_content).toBe("Let me think");
+
+    const second = converter.handleEvent({
+      type: "assistant",
+      timestamp_ms: now + 2,
+      message: {
+        role: "assistant",
+        content: [{ type: "thinking", thinking: " about this" }],
+      },
+    } as any);
+
+    expect(second).toHaveLength(1);
+    expect(parseChunk(second[0]).choices[0].delta.reasoning_content).toBe(" about this");
+
+    // Final accumulated thinking event (no timestamp_ms) — should be skipped
+    const final = converter.handleEvent({
+      type: "assistant",
+      message: {
+        role: "assistant",
+        content: [{ type: "thinking", thinking: "Let me think about this" }],
+      },
+    });
+
+    expect(final).toEqual([]);
+  });
+
+  it("still works with accumulated-only events (no timestamp_ms) via DeltaTracker", () => {
+    const converter = new StreamToSseConverter("test-model", {
+      id: "chunk-id",
+      created: 123,
+    });
+
+    // Accumulated-only events (no timestamp_ms), like fixture format — should work via DeltaTracker
+    const first = converter.handleEvent({
+      type: "assistant",
+      message: {
+        role: "assistant",
+        content: [{ type: "text", text: "Hello" }],
+      },
+    });
+
+    expect(first).toHaveLength(1);
+    expect(parseChunk(first[0]).choices[0].delta.content).toBe("Hello");
+
+    const second = converter.handleEvent({
+      type: "assistant",
+      message: {
+        role: "assistant",
+        content: [{ type: "text", text: "Hello world" }],
+      },
+    });
+
+    expect(second).toHaveLength(1);
+    expect(parseChunk(second[0]).choices[0].delta.content).toBe(" world");
+
+    // Duplicate event should produce no output
+    const dup = converter.handleEvent({
+      type: "assistant",
+      message: {
+        role: "assistant",
+        content: [{ type: "text", text: "Hello world" }],
+      },
+    });
+
+    expect(dup).toEqual([]);
+  });
 });

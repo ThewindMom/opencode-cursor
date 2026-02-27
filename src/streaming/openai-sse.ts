@@ -61,6 +61,11 @@ export class StreamToSseConverter {
   private readonly created: number;
   private readonly model: string;
   private readonly tracker = new DeltaTracker();
+  // Events with timestamp_ms carry delta text; events without carry accumulated text.
+  // DeltaTracker handles accumulated text only. When partials (delta) were seen,
+  // the final accumulated event must be skipped to prevent 2x duplication.
+  private sawAssistantPartials = false;
+  private sawThinkingPartials = false;
 
   constructor(model: string, options?: { id?: string; created?: number }) {
     this.model = model;
@@ -70,11 +75,29 @@ export class StreamToSseConverter {
 
   handleEvent(event: StreamJsonEvent): string[] {
     if (isAssistantText(event)) {
+      const isPartial = typeof (event as any).timestamp_ms === "number";
+      if (isPartial) {
+        this.sawAssistantPartials = true;
+        const text = extractText(event);
+        return text ? [this.chunkWith({ content: text })] : [];
+      }
+      if (this.sawAssistantPartials) {
+        return [];
+      }
       const delta = this.tracker.nextText(extractText(event));
       return delta ? [this.chunkWith({ content: delta })] : [];
     }
 
     if (isThinking(event)) {
+      const isPartial = typeof (event as any).timestamp_ms === "number";
+      if (isPartial) {
+        this.sawThinkingPartials = true;
+        const text = extractThinking(event);
+        return text ? [this.chunkWith({ reasoning_content: text })] : [];
+      }
+      if (this.sawThinkingPartials) {
+        return [];
+      }
       const delta = this.tracker.nextThinking(extractThinking(event));
       return delta ? [this.chunkWith({ reasoning_content: delta })] : [];
     }

@@ -107,4 +107,115 @@ describe("ai-sdk stream parts", () => {
       },
     ]);
   });
+
+  it("does not duplicate text when partial (timestamp_ms) events are followed by final accumulated event", () => {
+    const converter = new StreamToAiSdkParts();
+    const now = Date.now();
+
+    const first = converter.handleEvent({
+      type: "assistant",
+      timestamp_ms: now + 1,
+      message: {
+        role: "assistant",
+        content: [{ type: "text", text: "Hello" }],
+      },
+    } as any);
+
+    expect(first).toEqual([{ type: "text-delta", textDelta: "Hello" }]);
+
+    const second = converter.handleEvent({
+      type: "assistant",
+      timestamp_ms: now + 2,
+      message: {
+        role: "assistant",
+        content: [{ type: "text", text: " world" }],
+      },
+    } as any);
+
+    expect(second).toEqual([{ type: "text-delta", textDelta: " world" }]);
+
+    // Final accumulated event (no timestamp_ms) — should be skipped
+    const final = converter.handleEvent({
+      type: "assistant",
+      message: {
+        role: "assistant",
+        content: [{ type: "text", text: "Hello world" }],
+      },
+    });
+
+    expect(final).toEqual([]);
+  });
+
+  it("does not duplicate thinking when partial (timestamp_ms) events are followed by final accumulated event", () => {
+    const converter = new StreamToAiSdkParts();
+    const now = Date.now();
+
+    const first = converter.handleEvent({
+      type: "assistant",
+      timestamp_ms: now + 1,
+      message: {
+        role: "assistant",
+        content: [{ type: "thinking", thinking: "Let me think" }],
+      },
+    } as any);
+
+    expect(first).toEqual([{ type: "text-delta", textDelta: "Let me think" }]);
+
+    const second = converter.handleEvent({
+      type: "assistant",
+      timestamp_ms: now + 2,
+      message: {
+        role: "assistant",
+        content: [{ type: "thinking", thinking: " about this" }],
+      },
+    } as any);
+
+    expect(second).toEqual([{ type: "text-delta", textDelta: " about this" }]);
+
+    // Final accumulated thinking event (no timestamp_ms) — should be skipped
+    const final = converter.handleEvent({
+      type: "assistant",
+      message: {
+        role: "assistant",
+        content: [{ type: "thinking", thinking: "Let me think about this" }],
+      },
+    });
+
+    expect(final).toEqual([]);
+  });
+
+  it("still works with accumulated-only events (no timestamp_ms) via DeltaTracker", () => {
+    const converter = new StreamToAiSdkParts();
+
+    const first = converter.handleEvent({
+      type: "assistant",
+      message: {
+        role: "assistant",
+        content: [{ type: "text", text: "Hello" }],
+      },
+    });
+
+    expect(first).toEqual([{ type: "text-delta", textDelta: "Hello" }]);
+
+    const second = converter.handleEvent({
+      type: "assistant",
+      message: {
+        role: "assistant",
+        content: [{ type: "text", text: "Hello world" }],
+      },
+    });
+
+    expect(second).toEqual([{ type: "text-delta", textDelta: " world" }]);
+
+    // Duplicate event should produce no output
+    const dup = converter.handleEvent({
+      type: "assistant",
+      message: {
+        role: "assistant",
+        content: [{ type: "text", text: "Hello world" }],
+      },
+    });
+
+    expect(dup).toEqual([]);
+  });
 });
