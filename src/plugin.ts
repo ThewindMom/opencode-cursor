@@ -80,20 +80,59 @@ function debugLogToFile(message: string, data: any): void {
   }
 }
 
+interface McpToolSummary {
+  serverName: string;
+  toolName: string;
+  description?: string;
+  params?: string[];
+}
+
 export function buildAvailableToolsSystemMessage(
   lastToolNames: string[],
   lastToolMap: Array<{ id: string; name: string }>,
   mcpToolDefs: any[],
+  mcpToolSummaries?: McpToolSummary[],
 ): string | null {
-  const mcpToolNames = mcpToolDefs
-    .map((t: any) => t?.function?.name ?? t?.name)
-    .filter((name: unknown): name is string => typeof name === "string" && name.length > 0);
-  const combinedToolNames = Array.from(new Set([...lastToolNames, ...mcpToolNames]));
-  if (combinedToolNames.length === 0) return null;
+  const parts: string[] = [];
 
-  const names = combinedToolNames.join(", ");
-  const mapping = lastToolMap.map((m) => `${m.id} -> ${m.name}`).join("; ");
-  return `Available OpenCode tools (use via tool calls): ${names}. Original skill ids mapped as: ${mapping}. Aliases include oc_skill_* and oc_superskill_* when applicable.`;
+  if (lastToolNames.length > 0 || lastToolMap.length > 0) {
+    const names = lastToolNames.join(", ");
+    const mapping = lastToolMap.map((m) => `${m.id} -> ${m.name}`).join("; ");
+    parts.push(`Available OpenCode tools (use via tool calls): ${names}. Original skill ids mapped as: ${mapping}. Aliases include oc_skill_* and oc_superskill_* when applicable.`);
+  }
+
+  if (mcpToolSummaries && mcpToolSummaries.length > 0) {
+    const servers = new Map<string, McpToolSummary[]>();
+    for (const s of mcpToolSummaries) {
+      const list = servers.get(s.serverName) ?? [];
+      list.push(s);
+      servers.set(s.serverName, list);
+    }
+
+    const lines: string[] = [
+      "MCP TOOLS — Use via Shell with the `mcptool` CLI.",
+      "Syntax: mcptool call <server> <tool> [json-args]",
+      "",
+    ];
+
+    for (const [server, tools] of servers) {
+      lines.push(`Server: ${server}`);
+      for (const t of tools) {
+        const paramHint = t.params?.length ? ` (params: ${t.params.join(", ")})` : "";
+        lines.push(`  - ${t.toolName}${paramHint}${t.description ? " — " + t.description : ""}`);
+      }
+      if (tools.length > 0) {
+        const ex = tools[0];
+        const exArgs = ex.params?.length ? ` '{"${ex.params[0]}":"..."}'` : "";
+        lines.push(`  Example: mcptool call ${server} ${ex.toolName}${exArgs}`);
+      }
+      lines.push("");
+    }
+
+    parts.push(lines.join("\n"));
+  }
+
+  return parts.length > 0 ? parts.join("\n\n") : null;
 }
 
 export async function ensurePluginDirectory(): Promise<void> {
@@ -1763,6 +1802,7 @@ export const CursorPlugin: Plugin = async ({ $, directory, worktree, client, ser
   const mcpManager = new McpClientManager();
   let mcpToolEntries: Record<string, any> = {};
   let mcpToolDefs: any[] = [];
+  let mcpToolSummaries: McpToolSummary[] = [];
   const mcpEnabled = process.env.CURSOR_ACP_MCP_BRIDGE !== "false"; // default ON
 
   if (mcpEnabled) {
@@ -1781,6 +1821,14 @@ export const CursorPlugin: Plugin = async ({ $, directory, worktree, client, ser
         } else {
           mcpToolEntries = buildMcpToolHookEntries(tools, mcpManager);
           mcpToolDefs = buildMcpToolDefinitions(tools);
+          mcpToolSummaries = tools.map((t) => ({
+            serverName: t.serverName,
+            toolName: t.name,
+            description: t.description,
+            params: t.inputSchema
+              ? Object.keys((t.inputSchema as any).properties ?? {})
+              : undefined,
+          }));
           log.info("MCP bridge: registered tools", {
             servers: mcpManager.connectedServers.length,
             tools: Object.keys(mcpToolEntries).length,
@@ -2010,7 +2058,7 @@ export const CursorPlugin: Plugin = async ({ $, directory, worktree, client, ser
 
     async "experimental.chat.system.transform"(input: any, output: { system: string[] }) {
       if (!toolsEnabled) return;
-      const systemMessage = buildAvailableToolsSystemMessage(lastToolNames, lastToolMap, mcpToolDefs);
+      const systemMessage = buildAvailableToolsSystemMessage(lastToolNames, lastToolMap, mcpToolDefs, mcpToolSummaries);
       if (!systemMessage) return;
       output.system = output.system || [];
       output.system.push(systemMessage);

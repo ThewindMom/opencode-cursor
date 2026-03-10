@@ -6,8 +6,8 @@
   "main": "dist/plugin-entry.js",
   "module": "src/plugin-entry.ts",
   "scripts": {
-    "build": "bun build ./src/index.ts ./src/plugin-entry.ts ./src/cli/discover.ts ./src/cli/opencode-cursor.ts --outdir ./dist --target node",
-    "dev": "bun build ./src/index.ts ./src/plugin-entry.ts ./src/cli/discover.ts ./src/cli/opencode-cursor.ts --outdir ./dist --target node --watch",
+    "build": "bun build ./src/index.ts ./src/plugin-entry.ts ./src/cli/discover.ts ./src/cli/opencode-cursor.ts ./src/cli/mcptool.ts --outdir ./dist --target node",
+    "dev": "bun build ./src/index.ts ./src/plugin-entry.ts ./src/cli/discover.ts ./src/cli/opencode-cursor.ts ./src/cli/mcptool.ts --outdir ./dist --target node --watch",
     "test": "bun test",
     "test:unit": "bun test tests/unit",
     "test:integration": "bun test tests/integration",
@@ -18,7 +18,8 @@
   },
   "bin": {
     "open-cursor": "dist/cli/opencode-cursor.js",
-    "cursor-discover": "dist/cli/discover.js"
+    "cursor-discover": "dist/cli/discover.js",
+    "mcptool": "dist/cli/mcptool.js"
   },
   "exports": {
     ".": {
