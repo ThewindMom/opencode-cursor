@@ -25,6 +25,9 @@ import { ToolRouter } from "./tools/router.js";
 import { SkillLoader } from "./tools/skills/loader.js";
 import { SkillResolver } from "./tools/skills/resolver.js";
 import { autoRefreshModels } from "./models/sync.js";
+import { readMcpConfigs } from "./mcp/config.js";
+import { McpClientManager } from "./mcp/client-manager.js";
+import { buildMcpToolHookEntries, buildMcpToolDefinitions } from "./mcp/tool-bridge.js";
 import { createOpencodeClient } from "@opencode-ai/sdk";
 import { ToolRegistry as CoreRegistry } from "./tools/core/registry.js";
 import { LocalExecutor } from "./tools/executors/local.js";
@@ -75,6 +78,61 @@ function debugLogToFile(message: string, data: any): void {
   } catch {
     // Ignore errors
   }
+}
+
+interface McpToolSummary {
+  serverName: string;
+  toolName: string;
+  description?: string;
+  params?: string[];
+}
+
+export function buildAvailableToolsSystemMessage(
+  lastToolNames: string[],
+  lastToolMap: Array<{ id: string; name: string }>,
+  mcpToolDefs: any[],
+  mcpToolSummaries?: McpToolSummary[],
+): string | null {
+  const parts: string[] = [];
+
+  if (lastToolNames.length > 0 || lastToolMap.length > 0) {
+    const names = lastToolNames.join(", ");
+    const mapping = lastToolMap.map((m) => `${m.id} -> ${m.name}`).join("; ");
+    parts.push(`Available OpenCode tools (use via tool calls): ${names}. Original skill ids mapped as: ${mapping}. Aliases include oc_skill_* and oc_superskill_* when applicable.`);
+  }
+
+  if (mcpToolSummaries && mcpToolSummaries.length > 0) {
+    const servers = new Map<string, McpToolSummary[]>();
+    for (const s of mcpToolSummaries) {
+      const list = servers.get(s.serverName) ?? [];
+      list.push(s);
+      servers.set(s.serverName, list);
+    }
+
+    const lines: string[] = [
+      "MCP TOOLS — Use via Shell with the `mcptool` CLI.",
+      "Syntax: mcptool call <server> <tool> [json-args]",
+      "",
+    ];
+
+    for (const [server, tools] of servers) {
+      lines.push(`Server: ${server}`);
+      for (const t of tools) {
+        const paramHint = t.params?.length ? ` (params: ${t.params.join(", ")})` : "";
+        lines.push(`  - ${t.toolName}${paramHint}${t.description ? " — " + t.description : ""}`);
+      }
+      if (tools.length > 0) {
+        const ex = tools[0];
+        const exArgs = ex.params?.length ? ` '{"${ex.params[0]}":"..."}'` : "";
+        lines.push(`  Example: mcptool call ${server} ${ex.toolName}${exArgs}`);
+      }
+      lines.push("");
+    }
+
+    parts.push(lines.join("\n"));
+  }
+
+  return parts.length > 0 ? parts.join("\n\n") : null;
 }
 
 export async function ensurePluginDirectory(): Promise<void> {
@@ -1739,6 +1797,49 @@ export const CursorPlugin: Plugin = async ({ $, directory, worktree, client, ser
   // Auto-refresh model list from cursor-agent (non-blocking, fire-and-forget)
   autoRefreshModels().catch(() => {});
 
+  // MCP tool bridge: connect to MCP servers and register their tools.
+  // We await init so tools are available before the plugin returns its tool hook.
+  const mcpManager = new McpClientManager();
+  let mcpToolEntries: Record<string, any> = {};
+  let mcpToolDefs: any[] = [];
+  let mcpToolSummaries: McpToolSummary[] = [];
+  const mcpEnabled = process.env.CURSOR_ACP_MCP_BRIDGE !== "false"; // default ON
+
+  if (mcpEnabled) {
+    try {
+      const configs = readMcpConfigs();
+      if (configs.length === 0) {
+        log.debug("No MCP servers configured, skipping MCP bridge");
+      } else {
+        log.debug("MCP bridge: connecting to servers", { count: configs.length });
+
+        await Promise.allSettled(configs.map((c) => mcpManager.connectServer(c)));
+
+        const tools = mcpManager.listTools();
+        if (tools.length === 0) {
+          log.debug("MCP bridge: no tools discovered");
+        } else {
+          mcpToolEntries = buildMcpToolHookEntries(tools, mcpManager);
+          mcpToolDefs = buildMcpToolDefinitions(tools);
+          mcpToolSummaries = tools.map((t) => ({
+            serverName: t.serverName,
+            toolName: t.name,
+            description: t.description,
+            params: t.inputSchema
+              ? Object.keys((t.inputSchema as any).properties ?? {})
+              : undefined,
+          }));
+          log.info("MCP bridge: registered tools", {
+            servers: mcpManager.connectedServers.length,
+            tools: Object.keys(mcpToolEntries).length,
+          });
+        }
+      }
+    } catch (err) {
+      log.debug("MCP bridge init failed", { error: String(err) });
+    }
+  }
+
   // Initialize toast service for MCP pass-through notifications
   toastService.setClient(client);
 
@@ -1862,7 +1963,7 @@ export const CursorPlugin: Plugin = async ({ $, directory, worktree, client, ser
   const toolHookEntries = buildToolHookEntries(localRegistry, workspaceDirectory);
 
   return {
-    tool: toolHookEntries,
+    tool: { ...toolHookEntries, ...mcpToolEntries },
     auth: {
       provider: CURSOR_PROVIDER_ID,
       async loader(_getAuth: () => Promise<Auth>) {
@@ -1935,16 +2036,32 @@ export const CursorPlugin: Plugin = async ({ $, directory, worktree, client, ser
           log.debug("Failed to refresh tools", { error: String(err) });
         }
       }
+
+      // Append MCP bridge tool definitions so the model can call them
+      if (mcpToolDefs.length > 0) {
+        const beforeTools = Array.isArray(output.options.tools) ? output.options.tools : [];
+        if (Array.isArray(output.options.tools)) {
+          output.options.tools = [...output.options.tools, ...mcpToolDefs];
+        } else {
+          output.options.tools = mcpToolDefs;
+        }
+        const afterTools = Array.isArray(output.options.tools) ? output.options.tools : [];
+        log.debug("Injected MCP tool definitions into chat.params", {
+          injectedCount: mcpToolDefs.length,
+          beforeCount: beforeTools.length,
+          afterCount: afterTools.length,
+          mcpNames: mcpToolDefs.slice(0, 10).map((t: any) => t?.function?.name ?? t?.name ?? "unknown"),
+          tailNames: afterTools.slice(-10).map((t: any) => t?.function?.name ?? t?.name ?? "unknown"),
+        });
+      }
     },
 
     async "experimental.chat.system.transform"(input: any, output: { system: string[] }) {
-      if (!toolsEnabled || lastToolNames.length === 0) return;
-      const names = lastToolNames.join(", ");
-      const mapping = lastToolMap.map((m) => `${m.id} -> ${m.name}`).join("; ");
+      if (!toolsEnabled) return;
+      const systemMessage = buildAvailableToolsSystemMessage(lastToolNames, lastToolMap, mcpToolDefs, mcpToolSummaries);
+      if (!systemMessage) return;
       output.system = output.system || [];
-      output.system.push(
-        `Available OpenCode tools (use via tool calls): ${names}. Original skill ids mapped as: ${mapping}. Aliases include oc_skill_* and oc_superskill_* when applicable.`
-      );
+      output.system.push(systemMessage);
     },
   };
 };
