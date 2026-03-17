@@ -721,6 +721,16 @@ describe("EXPLORATION_TOOLS error-path threshold", () => {
     expect(d11.maxRepeat).toBe(10); // MUST be effectiveMaxRepeat, not raw 2
   });
 
+  it("task: 12 identical validation failures trigger (hard kill — second trigger)", () => {
+    const guard = createToolLoopGuard([], 2);
+    const call = { id: "t1", type: "function" as const, function: { name: "task", arguments: '{"prompt":"x"}' } };
+    for (let i = 0; i < 11; i++) guard.evaluate(call);
+    const d12 = guard.evaluate(call);
+    expect(d12.triggered).toBe(true);
+    expect(d12.repeatCount).toBe(12);
+    expect(d12.maxRepeat).toBe(10);
+  });
+
   it("read (existing EXPLORATION_TOOL): 5 tool_error failures do not trigger (error-path parity)", () => {
     // Before this fix: only success path got 5x. After: error path also gets 5x.
     const guard = createToolLoopGuard([], 2);
