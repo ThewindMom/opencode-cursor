@@ -192,7 +192,7 @@ function canonicalizePathForCompare(pathValue: string): string {
     normalizedPath = resolvedPath;
   }
 
-  if (process.platform === "darwin") {
+  if (process.platform === "darwin" || process.platform === "win32") {
     return normalizedPath.toLowerCase();
   }
 
