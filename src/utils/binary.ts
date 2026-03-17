@@ -1,6 +1,5 @@
 // src/utils/binary.ts
 import { existsSync as fsExistsSync } from "fs";
-import { join } from "path";
 import * as pathModule from "path";
 import { homedir as osHomedir } from "os";
 import { createLogger } from "./logger.js";
@@ -37,7 +36,7 @@ export function resolveCursorAgentBinary(deps: BinaryDeps = {}): string {
   }
 
   const knownPaths = [
-    join(home, ".cursor-agent", "cursor-agent"),
+    pathModule.join(home, ".cursor-agent", "cursor-agent"),
     "/usr/local/bin/cursor-agent",
   ];
   for (const p of knownPaths) {
