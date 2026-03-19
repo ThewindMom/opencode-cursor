@@ -193,171 +193,69 @@ curl -X POST http://localhost:32124/v1/chat/completions \
   }'
 ```
 
-## Client Integration Guides
+## Client Integration
 
-Choose your client below for detailed configuration:
+### curl (Verified Working)
 
-### [OpenCode](docs/OPENCODE.md)
-
-The most common use case for CliCursorProxyAPI is enabling Cursor Pro subscription models in OpenCode. Here's the complete setup:
-
-#### Step 1: Ensure Proxy is Running
+The proxy provides OpenAI-compatible API and works reliably with curl:
 
 ```bash
-cd /path/to/CliCursorProxyAPI
-bun run proxy
-```
-
-Verify it's working:
-```bash
+# Health check
 curl http://localhost:32124/health
-# {"status":"ok","version":"2.3.20","auth":"authenticated","mcp":{...}}
+
+# List models
+curl http://localhost:32124/v1/models
+
+# Chat completions (streaming)
+curl -X POST http://localhost:32124/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{"model":"auto","messages":[{"role":"user","content":"Hello"}],"stream":true}'
+
+# Non-streaming
+curl -X POST http://localhost:32124/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{"model":"sonnet-4.6","messages":[{"role":"user","content":"Hi"}],"stream":false}'
 ```
 
-#### Step 2: Authenticate with Cursor
+### pi.dev / oh-my-pi (Extension-based)
 
-```bash
-cursor-agent login
-```
+Both pi.dev and oh-my-pi use the same extension API. Create an extension file:
 
-#### Step 3: Configure OpenCode
+```typescript
+// ~/.pi/extensions/cursor-acp.ts (pi.dev)
+// or in your oh-my-pi extensions directory
+import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";  // pi.dev
+// or "@oh-my-pi/pi-coding-agent" for oh-my-pi
 
-Edit `~/.config/opencode/opencode.json`:
-
-```json
-{
-  "$schema": "https://opencode.ai/config.json",
-  "provider": {
-    "cursor-acp": {
-      "npm": "@ai-sdk/openai-compatible",
-      "name": "Cursor ACP",
-      "options": {
-        "baseURL": "http://127.0.0.1:32124/v1"
-      },
-      "models": {
-        "cursor-acp/composer-2": { "name": "Composer 2" },
-        "cursor-acp/composer-2-fast": { "name": "Composer 2 Fast" },
-        "cursor-acp/composer-1.5": { "name": "Composer 1.5" },
-        "cursor-acp/auto": { "name": "Auto" },
-        "cursor-acp/sonnet-4.6": { "name": "Sonnet 4.6" },
-        "cursor-acp/opus-4.6": { "name": "Opus 4.6" }
-      }
-    }
-  }
+export default function (pi: ExtensionAPI) {
+  pi.registerProvider("cursor-acp", {
+    baseUrl: "http://127.0.0.1:32124/v1",
+    apiKey: "dummy",  // Required but ignored
+    api: "openai-completions",
+    models: [
+      { id: "auto", name: "Auto", reasoning: true, input: ["text", "image"],
+        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+        contextWindow: 200000, maxTokens: 16384 },
+      { id: "composer-2-fast", name: "Composer 2 Fast", reasoning: false, input: ["text"],
+        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+        contextWindow: 200000, maxTokens: 16384 },
+      { id: "sonnet-4.6", name: "Sonnet 4.6", reasoning: false, input: ["text", "image"],
+        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+        contextWindow: 200000, maxTokens: 16384 },
+    ]
+  });
 }
 ```
 
-**Important:** The `baseURL` must end with `/v1` and point to your running proxy.
+Reload the agent after adding the extension.
 
-#### Step 4: Verify Models are Visible
+### Claude Code (Not Supported)
 
-```bash
-opencode models cursor-acp
-```
+Claude Code **only supports Anthropic Messages API format**. CliCursorProxyAPI provides OpenAI-compatible API. These are incompatible without additional translation layer.
 
-You should see:
-```
-cursor-acp/cursor-acp/auto
-cursor-acp/cursor-acp/composer-1.5
-cursor-acp/cursor-acp/composer-2
-cursor-acp/cursor-acp/composer-2-fast
-cursor-acp/cursor-acp/opus-4.6
-cursor-acp/cursor-acp/sonnet-4.6
-```
-
-**Note:** The double prefix (`cursor-acp/cursor-acp/`) is cosmetic — the proxy correctly handles the model name stripping.
-
-#### Step 5: Use in OpenCode
-
-**Using the CLI:**
-```bash
-opencode run --model "cursor-acp/cursor-acp/composer-2-fast" "Hello, write a hello world in Python"
-```
-
-**Using the TUI:**
-```bash
-# Set default model in config
-opencode -m cursor-acp/cursor-acp/composer-2-fast
-```
-
-Or within the TUI, use the model selector.
-
-#### Common OpenCode Commands
-
-```bash
-# List all models
-opencode models
-
-# List cursor-acp models specifically
-opencode models cursor-acp
-
-# Run with specific model
-opencode run --model "cursor-acp/cursor-acp/auto" "Your prompt here"
-
-# Start TUI with specific model
-opencode -m cursor-acp/cursor-acp/sonnet-4.6
-```
-
-#### Troubleshooting OpenCode Integration
-
-**"Unknown model" error:**
-- Ensure the proxy is running: `curl http://localhost:32124/health`
-- Use the full model name: `cursor-acp/cursor-acp/auto` (not just `auto`)
-- Restart OpenCode after config changes
-
-**Config file syntax error:**
-- JSON must be valid — trailing commas will cause errors
-- Use `python3 -m json.tool ~/.config/opencode/opencode.json` to validate
-
-**Model not appearing in list:**
-- Check the proxy is returning models: `curl http://localhost:32124/v1/models`
-- Ensure auth is working: `curl http://localhost:32124/health` should show `auth: "authenticated"`
-
-**See:** [docs/OPENCODE.md](docs/OPENCODE.md) for full guide
-
----
-
-### [oh-my-pi](docs/OH-MY-PI.md)
-
-Register CliCursorProxyAPI as a provider in oh-my-pi:
-
-```typescript
-// ~/.omp/extensions/cursor-acp.ts
-pi.registerProvider("cursor-acp", {
-  baseUrl: "http://127.0.0.1:32124/v1",
-  apiKey: "dummy",  // Ignored; auth handled by cursor-agent
-  api: "openai-completions",
-  models: [
-    { id: "auto", name: "Auto", reasoning: true, ... },
-    { id: "sonnet-4.6", name: "Claude 4.6 Sonnet", ... }
-  ]
-});
-```
-
-**See:** [docs/OH-MY-PI.md](docs/OH-MY-PI.md) for full guide
-
----
-
-### [Factory Droid](docs/FACTORY-DROID.md)
-
-The proxy is already configured in `.factory/services.yaml`:
-
-```yaml
-services:
-  cursor-proxy:
-    name: cursor-proxy
-    port: 32124
-    start: cd /path/to/CliCursorProxyAPI && bun run proxy
-    healthcheck: curl -sf http://localhost:32124/health
-```
-
-**See:** [docs/FACTORY-DROID.md](docs/FACTORY-DROID.md) for full guide
-
----
-
-### [curl](docs/OPENCODE.md#testing-the-integration)
-
-Test directly with curl for any OpenAI-compatible client:
+To use Cursor models with Claude Code, you would need:
+1. A proxy that translates Anthropic API format to Cursor API
+2. Or use a provider that supports both formats (like OpenRouter)
 
 ```bash
 # Health check
