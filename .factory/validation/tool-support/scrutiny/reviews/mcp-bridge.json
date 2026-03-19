@@ -1,0 +1,54 @@
+{
+  "featureId": "mcp-bridge",
+  "reviewedAt": "2026-03-19T22:00:00.000Z",
+  "commitId": "e7bff69",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "fail",
+  "codeReview": {
+    "summary": "Implementation adds MCP bridge infrastructure to standalone-server.ts with MCP server discovery, tool namespacing (mcp__server__tool), tool call interception, async execution, and /v1/tools endpoint. Core infrastructure is sound but the implementation has two blocking issues: (1) VAL-CROSS-003 assertion requires actual MCP tool execution through the proxy, but the verification steps never tested this - only proxy startup and health endpoint were verified. (2) The MCP tool name extraction logic assumes cursor-agent outputs tool names in mcp__server__tool format, but there is no evidence this assumption is correct. The tool-bridge.ts (used by the plugin) sanitizes names with special characters, while standalone-server.ts does not - these are inconsistent approaches.",
+    "issues": [
+      {
+        "file": "src/proxy/standalone-server.ts",
+        "line": 921,
+        "severity": "blocking",
+        "description": "The /v1/tools endpoint returns tool objects without description or inputSchema fields, even though the interface declares these fields. The tool definitions returned by listTools() include description and inputSchema but are not included in the response. This prevents clients from knowing what arguments each tool accepts."
+      },
+      {
+        "file": "src/proxy/standalone-server.ts",
+        "line": 69,
+        "severity": "blocking",
+        "description": "The tool name extraction logic (line 693-695) assumes cursor-agent outputs MCP tool names in the format 'mcp__server__tool'. For example, if toolKey is 'BashToolCall', it converts to 'bash'. But MCP tools from the MCP bridge use namespaced names like 'mcp__server__tool', which would NOT be transformed (since it doesn't end with 'ToolCall'). There is no verification in the handoff that cursor-agent actually uses the mcp__server__tool format for MCP tool call names in its stream-json output. Without this verification, it's unclear if MCP tool calls would be intercepted at all."
+      },
+      {
+        "file": "src/proxy/standalone-server.ts",
+        "line": 715,
+        "severity": "non_blocking",
+        "description": "MCP tool calls bypass the loop guard entirely. The loop guard is evaluated BEFORE the isMcpTool check (line 710), so MCP tools are not subject to loop detection. This may be intentional since MCP servers handle their own logic, but it's inconsistent with how non-MCP tools are protected."
+      },
+      {
+        "file": "src/proxy/standalone-server.ts",
+        "line": 39,
+        "severity": "non_blocking",
+        "description": "If initMcpBridge() throws an error before setting mcpInitialized=true, subsequent calls will retry initialization. While the try/catch handles this, the console.warn message could be confusing if configs exist but all fail to connect. Also, mcpInitialized is set to true at the end even when configs.length===0 without servers, so there's no explicit 'no servers' flag set."
+      }
+    ]
+  },
+  "sharedStateObservations": [
+    {
+      "area": "skills",
+      "observation": "tool-bridge.ts uses sanitization (serverName.replace(/[^a-zA-Z0-9]/g, '_')) when building MCP tool namespaces, but standalone-server.ts does NOT sanitize when building its mcpTools lookup map. If server names contain special characters, the two approaches produce different namespace keys, creating an inconsistency between the plugin architecture and standalone proxy.",
+      "where": "src/mcp/tool-bridge.ts:82 vs src/proxy/standalone-server.ts:69",
+      "implication": "Tools from servers with special characters (dashes, dots, etc.) may have different namespaced names depending on which code path discovers them. The standalone proxy's namespace may not match what tool-bridge produces."
+    },
+    {
+      "area": "conventions",
+      "observation": "The AGENTS.md does not document the expected cursor-agent stream format for MCP tool calls. Without this, workers implementing MCP tool interception must guess how cursor-agent formats MCP tool names in its stream-json output.",
+      "where": "AGENTS.md and user-testing.md",
+      "implication": "Workers may implement MCP tool interception based on assumptions that don't match cursor-agent's actual output format, leading to tools not being intercepted."
+    }
+  ],
+  "fulfillsAssertions": [],
+  "addressesFailureFrom": null,
+  "summary": "The mcp-bridge feature has the correct infrastructure in place but FAILS to fulfill VAL-CROSS-003 because: (1) No actual MCP tool execution was verified - only proxy startup and health endpoint were tested. (2) The critical assumption that cursor-agent outputs MCP tool names in mcp__server__tool format is unverified. (3) The /v1/tools endpoint is missing tool descriptions and input schemas. The implementation is incomplete and requires verification of cursor-agent's actual MCP tool output format, plus end-to-end testing of MCP tool execution through the proxy."
+}

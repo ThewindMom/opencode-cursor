@@ -1,0 +1,49 @@
+{
+  "milestone": "tool-support",
+  "round": 1,
+  "status": "fail",
+  "validatorsRun": {
+    "test": { "passed": true, "command": "bun test", "exitCode": 0, "summary": "493 pass, 5 skip, 0 fail" },
+    "typecheck": { "passed": true, "command": "bun run typecheck", "exitCode": 0 },
+    "lint": { "passed": true, "command": "bun run lint", "exitCode": 0 }
+  },
+  "reviewsSummary": {
+    "total": 3,
+    "passed": 2,
+    "failed": 1,
+    "failedFeatures": ["mcp-bridge"]
+  },
+  "blockingIssues": [
+    {
+      "featureId": "mcp-bridge",
+      "severity": "blocking",
+      "file": "src/proxy/standalone-server.ts",
+      "line": 921,
+      "description": "The /v1/tools endpoint returns tool objects without description or inputSchema fields, even though the interface declares these fields. The tool definitions returned by listTools() include description and inputSchema but are not included in the response. This prevents clients from knowing what arguments each tool accepts."
+    },
+    {
+      "featureId": "mcp-bridge",
+      "severity": "blocking",
+      "file": "src/proxy/standalone-server.ts",
+      "line": 69,
+      "description": "The tool name extraction logic (line 693-695) assumes cursor-agent outputs MCP tool names in the format 'mcp__server__tool'. For example, if toolKey is 'BashToolCall', it converts to 'bash'. But MCP tools from the MCP bridge use namespaced names like 'mcp__server__tool', which would NOT be transformed (since it doesn't end with 'ToolCall'). There is no verification that cursor-agent actually uses the mcp__server__tool format for MCP tool call names in its stream-json output."
+    }
+  ],
+  "appliedUpdates": [],
+  "suggestedGuidanceUpdates": [
+    {
+      "target": "AGENTS.md",
+      "suggestion": "Document the expected cursor-agent stream format for MCP tool calls (mcp__server__tool format). Without this, workers implementing MCP tool interception must guess how cursor-agent formats MCP tool names.",
+      "evidence": "mcp-bridge feature assumed mcp__server__tool format without verification",
+      "isSystemic": false
+    },
+    {
+      "target": "AGENTS.md",
+      "suggestion": "Document the server name sanitization convention used in tool-bridge.ts: serverName.replace(/[^a-zA-Z0-9]/g, '_'). The standalone proxy does not follow the same convention, creating potential namespace mismatches for servers with special characters.",
+      "evidence": "tool-bridge.ts sanitizes server names, standalone-server.ts does not",
+      "isSystemic": false
+    }
+  ],
+  "rejectedObservations": [],
+  "previousRound": null
+}
