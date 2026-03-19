@@ -170,14 +170,38 @@ function isThinkingEvent(event: any): boolean {
 }
 
 function extractText(event: any): string {
+  // Handle nested message.content format: {"type":"assistant","message":{"content":[{"type":"text","text":"..."}]}}
+  if (event?.message?.content) {
+    const content = event.message.content;
+    if (Array.isArray(content)) {
+      return content
+        .filter((c: any) => c?.type === "text" && typeof c?.text === "string")
+        .map((c: any) => c.text)
+        .join("");
+    }
+  }
+  // Handle direct formats
   if (typeof event?.text === "string") return event.text;
   if (typeof event?.content === "string") return event.content;
   return "";
 }
 
 function extractThinking(event: any): string {
+  // Handle nested message.content format for thinking
+  if (event?.message?.content) {
+    const content = event.message.content;
+    if (Array.isArray(content)) {
+      return content
+        .filter((c: any) => c?.type === "thinking" && typeof c?.thinking === "string")
+        .map((c: any) => c.thinking)
+        .join("");
+    }
+  }
+  // Handle direct formats
   if (typeof event?.thinking === "string") return event.thinking;
   if (typeof event?.reasoning === "string") return event.reasoning;
+  // Handle standalone thinking events: {"type":"thinking","text":"..."}
+  if (event?.type === "thinking" && typeof event?.text === "string") return event.text;
   return "";
 }
 
@@ -271,6 +295,7 @@ async function handleChatCompletions(
     "--stream-partial-output",
     "--workspace",
     workspaceDir,
+    "--trust",
     "--model",
     model,
   ];
@@ -397,14 +422,29 @@ async function handleChatCompletions(
         // Check if it's a tool call - forward it as a chunk
         const event = parseStreamLine(line);
         if (event?.type === "tool_call") {
+          // event.tool_call is a Record like { "BashToolCall": { args: { command: "ls" } } }
+          const toolKey = Object.keys(event.tool_call || {})[0];
+          const toolPayload = toolKey ? event.tool_call[toolKey] : null;
+          const toolArgs = toolPayload?.args ?? {};
+
+          // Infer tool name from key (e.g., "BashToolCall" -> "bash")
+          let toolName = "tool";
+          if (toolKey) {
+            if (toolKey.endsWith("ToolCall")) {
+              toolName = toolKey.slice(0, -"ToolCall".length).toLowerCase();
+            } else {
+              toolName = toolKey;
+            }
+          }
+
           const chunk = createChunk(state.id, state.created, state.model, {
             tool_calls: [{
               index: 0,
               id: event.call_id || "unknown",
               type: "function",
               function: {
-                name: event.tool_call?.name || "tool",
-                arguments: JSON.stringify(event.tool_call?.args || {}),
+                name: toolName,
+                arguments: JSON.stringify(toolArgs),
               },
             }],
           });
