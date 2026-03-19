@@ -14,6 +14,8 @@ import { createRequire } from "node:module";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { verifyCursorAuth } from "../auth.js";
+import { createToolLoopGuard, parseToolLoopMaxRepeat, type ToolLoopGuard } from "../provider/tool-loop-guard.js";
+import type { OpenAiToolCall } from "./tool-loop.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -529,6 +531,12 @@ async function handleChatCompletions(
     sawThinkingPartials: false,
   };
 
+  // Initialize tool loop guard to prevent infinite tool calling
+  const maxRepeatEnv = process.env.TOOL_LOOP_MAX_REPEAT;
+  const { value: maxRepeat } = parseToolLoopMaxRepeat(maxRepeatEnv);
+  const toolLoopGuard: ToolLoopGuard = createToolLoopGuard(messages, maxRepeat);
+  let loopGuardTriggered = false;
+
   const lineBuffer: string[] = [];
   let buffer = "";
   let stderrBuffer = "";
@@ -571,10 +579,41 @@ async function handleChatCompletions(
             }
           }
 
+          // Evaluate tool call with loop guard
+          const toolCallId = event.call_id || "unknown";
+          const toolCall: OpenAiToolCall = {
+            id: toolCallId,
+            type: "function",
+            function: {
+              name: toolName,
+              arguments: JSON.stringify(toolArgs),
+            },
+          };
+
+          const decision = toolLoopGuard.evaluate(toolCall);
+
+          if (decision.triggered) {
+            // Loop guard triggered - emit error and stop stream
+            loopGuardTriggered = true;
+            const errorMessage = decision.errorClass === "success"
+              ? `Tool loop guard stopped repeated successful calls to "${toolCall.function.name}" after ${decision.repeatCount} attempts.`
+              : `Tool loop guard stopped repeated failing calls to "${toolCall.function.name}" after ${decision.repeatCount} attempts (limit ${decision.maxRepeat}). Adjust tool arguments and retry.`;
+
+            const errorChunk = createChunk(state.id, state.created, state.model, {
+              content: `cursor-proxy error: ${errorMessage}`,
+            }, true);
+            res.write(formatSseChunk(errorChunk));
+            res.write(formatSseDone());
+            res.end();
+
+            console.warn(`Tool loop guard triggered: ${decision.fingerprint} (${decision.repeatCount}/${decision.maxRepeat})`);
+            return;
+          }
+
           const chunk = createChunk(state.id, state.created, state.model, {
             tool_calls: [{
               index: 0,
-              id: event.call_id || "unknown",
+              id: toolCallId,
               type: "function",
               function: {
                 name: toolName,
@@ -589,6 +628,11 @@ async function handleChatCompletions(
   };
 
   child.on("close", (code) => {
+    // Skip processing if loop guard was triggered (already sent error)
+    if (loopGuardTriggered) {
+      return;
+    }
+
     // Check for errors (non-zero exit code with no output)
     if (code !== 0 && !state.sawAssistantPartials && !state.assistantBuffer) {
       const parsed = parseAgentError(stderrBuffer);
