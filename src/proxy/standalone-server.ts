@@ -77,7 +77,7 @@ function parseAgentError(stderr: string | unknown): AgentError {
     };
   }
 
-  if (clean.includes("model not found") || clean.includes("invalid model") || clean.includes("unknown model")) {
+  if (clean.includes("model not found") || clean.includes("invalid model") || clean.includes("unknown model") || clean.includes("Cannot use this model")) {
     return {
       message: clean,
       userMessage: clean.substring(0, 200) || "Model not available",
@@ -411,6 +411,22 @@ async function handleChatCompletions(
         // Non-zero exit code always indicates an error, regardless of stdout content
         const parsed = parseAgentError(stderr);
         // Return proper HTTP error with OpenAI error format
+        res.writeHead(parsed.statusCode, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({
+          error: {
+            message: parsed.userMessage,
+            type: parsed.type,
+            code: parsed.code,
+            status: parsed.statusCode,
+          }
+        }));
+        return;
+      }
+
+      // Also check stdout for error messages (cursor-agent may output errors to stdout with exit code 0)
+      // This handles cases like "Cannot use this model: ..." which is output to stdout
+      if (stdout.includes("Cannot use this model") || stdout.includes("model not found") || stdout.includes("invalid model")) {
+        const parsed = parseAgentError(stdout);
         res.writeHead(parsed.statusCode, { "Content-Type": "application/json" });
         res.end(JSON.stringify({
           error: {
