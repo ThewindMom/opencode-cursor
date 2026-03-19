@@ -1,0 +1,15 @@
+commands:
+  install: bun install
+  build: bun run build
+  test: bun test
+  lint: bun lint
+  dev: bun run proxy
+  typecheck: bun run typecheck
+
+services:
+  proxy:
+    start: bun run proxy
+    stop: lsof -ti :32124 | xargs kill
+    healthcheck: curl -sf http://localhost:32124/health
+    port: 32124
+    depends_on: []
