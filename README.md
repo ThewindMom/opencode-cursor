@@ -100,18 +100,46 @@ curl -X POST http://localhost:32124/v1/chat/completions \
 
 ## Using Composer 2
 
-Composer 2 is Cursor's latest flagship model with enhanced coding capabilities.
+Composer 2 is Cursor's flagship model with frontier-level coding performance.
 
-### Available Composer Models
+### Usage & Limits
+
+**Important:** Composer 2 and Auto use a **Composer usage pool** with generous included usage on Pro plans — they are **not truly unlimited**. Once exhausted, usage is charged at API rates.
+
+| Plan | Composer/Auto Pool | Tab Completions |
+|------|-------------------|----------------|
+| Pro ($20/mo) | Generous included | Unlimited |
+| Pro Plus ($60/mo) | Generous included | Unlimited |
+| Ultra ($200/mo) | Generous included | Unlimited |
+
+### Composer 2 Pricing
+
+| Variant | Input | Cache Read | Output |
+|---------|-------|-----------|--------|
+| Standard | $0.50/M | $0.20/M | $2.50/M |
+| Fast (default) | $1.50/M | $0.35/M | $7.50/M |
+
+### Auto + Composer Pool Pricing
+
+When using `auto` or `composer-1.5`:
+
+| Token Type | Price |
+|------------|-------|
+| Input + Cache Write | $1.25/M |
+| Cache Read | $0.25/M |
+| Output | $6.00/M |
+
+### Available Models
 
 ```bash
 curl http://localhost:32124/v1/models | grep composer
 ```
 
 **Models:**
-- `composer-2` — Composer 2 (full power)
-- `composer-2-fast` — Composer 2 Fast mode
+- `composer-2` — Composer 2 (standard tier)
+- `composer-2-fast` — Composer 2 Fast (default, higher throughput)
 - `composer-1.5` — Composer 1.5
+- `auto` — Auto-select (uses Composer pool)
 
 ### Test Composer 2
 
@@ -127,16 +155,16 @@ curl -X POST http://localhost:32124/v1/chat/completions \
 
 ### All Available Models
 
-| Model ID | Description |
-|----------|-------------|
-| `auto` | Auto-select best model |
-| `composer-2` | Composer 2 (latest) |
-| `composer-2-fast` | Composer 2 Fast |
-| `composer-1.5` | Composer 1.5 |
-| `sonnet-4.6` | Claude Sonnet 4.6 |
-| `opus-4.6` | Claude Opus 4.6 |
-| `gpt-5.2` | GPT-5.2 |
-| `gpt-5.3-codex` | GPT-5.3 Codex |
+| Model ID | Description | Usage Pool |
+|----------|-------------|-----------|
+| `auto` | Auto-select best model | Composer |
+| `composer-2` | Composer 2 (standard) | Composer |
+| `composer-2-fast` | Composer 2 Fast | Composer |
+| `composer-1.5` | Composer 1.5 | Composer |
+| `sonnet-4.6` | Claude Sonnet 4.6 | API |
+| `opus-4.6` | Claude Opus 4.6 | API |
+| `gpt-5.2` | GPT-5.2 | API |
+| `gpt-5.3-codex` | GPT-5.3 Codex | API |
 
 ### Example: Code Review with Composer 2
 
@@ -144,10 +172,10 @@ curl -X POST http://localhost:32124/v1/chat/completions \
 curl -X POST http://localhost:32124/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{
-    "model": "composer-2",
+    "model": "composer-2-fast",
     "messages": [
       {"role": "system", "content": "You are a code reviewer."},
-      {"role": "user", "content": "Review this function and suggest improvements:\n\nfunction add(a, b) { return a + b }"}
+      {"role": "user", "content": "Review this function:\n\nfunction add(a, b) { return a + b }"}
     ],
     "stream": false
   }'
