@@ -1,0 +1,44 @@
+{
+  "milestone": "validation",
+  "groupId": "cross-cutting-flows",
+  "assertions": ["VAL-CROSS-001", "VAL-CROSS-002"],
+  "status": "blocked",
+  "environment": {
+    "proxyServer": "http://localhost:32124",
+    "proxyStatus": "running",
+    "proxyVersion": "2.3.20",
+    "cursorAgentAuth": "not_authenticated"
+  },
+  "blockingReason": "cursor-agent is not authenticated. Running `cursor-agent status` shows 'Not logged in'. End-to-end chat flow testing requires authenticated cursor-agent to establish valid models and complete OAuth flow.",
+  "evidence": {
+    "healthCheck": {
+      "command": "curl -s http://localhost:32124/health",
+      "result": "{\"status\":\"ok\",\"version\":\"2.3.20\",\"auth\":\"not_authenticated\",\"mcp\":{\"enabled\":true,\"servers\":0,\"tools\":0}}"
+    },
+    "cursorAgentStatus": {
+      "command": "cursor-agent status",
+      "result": "Not logged in (command timed out after 60s)"
+    },
+    "modelsEndpoint": {
+      "command": "curl -s http://localhost:32124/v1/models",
+      "result": "{\"object\":\"list\",\"data\":[]}"
+    }
+  },
+  "codeVerification": {
+    "note": "Code implementation verified via 490 unit tests as noted in end-to-end-test feature. TypeScript compiles cleanly, lint passes.",
+    "testCoverage": "Unit tests pass for streaming, auth, tool calling, and MCP bridge components"
+  },
+  "frictions": [],
+  "blockers": [
+    {
+      "assertion": "VAL-CROSS-001",
+      "reason": "Requires authenticated cursor-agent to test full chat flow with streaming. Without auth, cursor-agent cannot provide valid model list or complete OAuth flow."
+    },
+    {
+      "assertion": "VAL-CROSS-002",
+      "reason": "Requires authenticated cursor-agent to test auth flow with model selection. Same auth blocker as VAL-CROSS-001."
+    }
+  ],
+  "toolsUsed": ["curl"],
+  "testedAt": "2026-03-19T23:15:00Z"
+}
