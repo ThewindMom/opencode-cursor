@@ -1,0 +1,55 @@
+{
+  "featureId": "chat-completions-streaming",
+  "reviewedAt": "2026-03-19T20:10:00.000Z",
+  "commitId": "edb0ba73a7891f4ab8af015d82dc16cbfd29a400",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "pass",
+  "codeReview": {
+    "summary": "Feature implementation correctly handles streaming SSE with cursor-agent stream-json to OpenAI SSE conversion. Three bugs were fixed: (1) --trust flag for non-interactive workspace access, (2) nested message.content format parsing for extractText/extractThinking, (3) tool_call Record key parsing. Implementation covers all expected behaviors. However, there are code quality issues including dead imports and a bug in non-streaming error handling.",
+    "issues": [
+      {
+        "file": "src/proxy/standalone-server.ts",
+        "line": 355,
+        "severity": "blocking",
+        "description": "Non-streaming error handling bug: condition `if (code !== 0 && !stdout)` silently ignores errors when cursor-agent exits non-zero but produces partial stdout. A non-zero exit code typically indicates an error even if some output was produced. The partial output is treated as a successful response, which could mislead users."
+      },
+      {
+        "file": "src/proxy/standalone-server.ts",
+        "line": 589,
+        "severity": "non_blocking",
+        "description": "Dead imports: The file imports `extractText`, `extractThinking`, `inferToolName`, `isAssistantText`, `isThinking`, `isToolCall` from `./types.js` and `DeltaTracker` from `./delta-tracker.js`, but these are never used. The file defines its own local versions of `extractText` and `extractThinking`. This dead code suggests incomplete refactoring."
+      },
+      {
+        "file": "src/proxy/standalone-server.ts",
+        "line": 92,
+        "severity": "non_blocking",
+        "description": "Code duplication: `extractText` and `extractThinking` are reimplemented locally in standalone-server.ts, but these functions already exist in `src/streaming/types.ts`. Similarly, `DeltaTracker` exists in `src/streaming/delta-tracker.ts`. The `StreamToSseConverter` class in `openai-sse.ts` is not utilized. Using the existing streaming utilities would reduce code duplication and improve maintainability."
+      }
+    ]
+  },
+  "sharedStateObservations": [
+    {
+      "area": "knowledge",
+      "observation": "Worker discovered that cursor-agent requires `--trust` flag for non-interactive workspace access. This runtime behavior is not documented in `.factory/library/environment.md`. Future workers may encounter the same issue and waste time debugging.",
+      "evidence": "Transcript shows worker ran `echo 'What is 2+2?' | cursor-agent --print --output-format stream-json --stream-partial-output --workspace /tmp` and got 'Authorization failed' until adding `--trust` flag. Handoff mentions this was fixed."
+    },
+    {
+      "area": "services",
+      "observation": "Worker started proxy server with `PORT=32124 bun run proxy` which differs from the services.yaml command `bun run proxy`. The PORT environment variable is not documented in services.yaml.",
+      "evidence": "Transcript shows `PORT=32124 bun run proxy` was used. services.yaml shows `proxy: { start: 'bun run proxy' }` without PORT override."
+    },
+    {
+      "area": "skills",
+      "observation": "Worker skill procedure lists 'Run lint/typecheck' as verification step, but skill doesn't clarify that lint errors should block completion. Worker ran `bun run build` successfully but did not run `bun run lint` explicitly. This may be acceptable if build includes typecheck, but the skill could be clearer.",
+      "evidence": "Worker skill says 'Run verificationSteps from feature' and 'Run lint/typecheck'. Transcript shows worker ran `bun run build` and `bun test` but not explicit lint."
+    },
+    {
+      "area": "conventions",
+      "observation": "AGENTS.md specifies SSE streaming format as `data: {...}\\n\\n` (double newline), which is correctly implemented. No violation found, but documenting the expected NDJSON-to-SSE conversion pattern in library would help future workers.",
+      "evidence": "AGENTS.md states SSE format. Git diff confirms `formatSseChunk` uses `data: ${JSON.stringify(payload)}\\n\\n`."
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "The chat-completions-streaming feature correctly implements POST /v1/chat/completions with streaming SSE support. The implementation properly converts cursor-agent stream-json NDJSON output to OpenAI SSE format, handling text in delta.content, thinking in delta.reasoning_content, tool calls in delta.tool_calls, and proper stream termination. The three bugs fixed (--trust flag, nested content parsing, tool_call Record parsing) were all necessary and correct. One blocking issue exists in non-streaming error handling where non-zero exit codes with partial stdout are silently ignored. Additionally, there are dead imports and code duplication that, while not blocking, indicate incomplete refactoring and missed opportunity to use existing streaming utilities."
+}

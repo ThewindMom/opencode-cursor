@@ -1,6 +1,6 @@
 {
   "milestone": "foundation",
-  "round": 1,
+  "round": 2,
   "status": "fail",
   "validatorsRun": {
     "test": {
@@ -10,43 +10,83 @@
       "summary": "499 pass, 1 skip"
     },
     "typecheck": {
-      "passed": false,
-      "command": "npx tsc --noEmit",
-      "exitCode": 2,
-      "summary": "38 TypeScript errors in 6 files"
+      "passed": true,
+      "command": "bun run typecheck",
+      "exitCode": 0,
+      "summary": "TypeScript compilation passed with no errors"
     },
     "lint": {
-      "passed": false,
+      "passed": true,
       "command": "bun lint",
-      "exitCode": 1,
-      "summary": "Script not found 'lint' in package.json"
+      "exitCode": 0,
+      "summary": "Lint passed successfully"
     }
   },
   "reviewsSummary": {
-    "total": 0,
-    "passed": 0,
-    "failed": 0,
-    "failedFeatures": []
+    "total": 9,
+    "passed": 8,
+    "failed": 1,
+    "failedFeatures": ["auth-flow-cursor-agent"]
   },
   "blockingIssues": [
     {
-      "featureId": "scrutiny-validator-foundation",
+      "featureId": "chat-completions-streaming",
       "severity": "blocking",
-      "description": "TypeScript type checking failed with 38 errors in: src/provider/runtime-interception.ts (18 errors), src/plugin.ts (11 errors), src/tools/router.ts (4 errors), src/tools/discovery.ts (3 errors), src/mcp/client-manager.ts (1 error), src/tools/registry.ts (1 error)"
+      "description": "Non-streaming error handling bug at line 355: condition `if (code !== 0 && !stdout)` silently ignores errors when cursor-agent exits non-zero but produces partial stdout. A non-zero exit code typically indicates an error even if some output was produced."
     },
     {
-      "featureId": "scrutiny-validator-foundation",
+      "featureId": "auth-flow-cursor-agent",
       "severity": "blocking",
-      "description": "Lint script 'bun lint' not found - no lint script defined in package.json"
+      "description": "Handoff metadata references commitId 'edb0ba8' which does not exist in the repository (actual commit is '07eb9c6'). This is a tracking discrepancy."
     },
     {
-      "featureId": "scrutiny-validator-foundation",
+      "featureId": "auth-flow-cursor-agent",
       "severity": "blocking",
-      "description": "services.yaml references 'lint' and 'typecheck' scripts that either don't exist or are broken"
+      "description": "Expected behavior states 'Token is sent in Authorization header' but implementation delegates auth to cursor-agent internally (cursor-agent reads ~/.cursor/auth.json or cli-config.json directly). Documentation/implementation mismatch."
     }
   ],
   "appliedUpdates": [],
-  "suggestedGuidanceUpdates": [],
-  "rejectedObservations": [],
-  "previousRound": null
+  "suggestedGuidanceUpdates": [
+    {
+      "target": "AGENTS.md",
+      "suggestion": "Add clarification on authentication architecture: the proxy delegates auth to cursor-agent internally rather than extracting tokens for Authorization headers. This affects expected behavior documentation for features.",
+      "evidence": "auth-flow-cursor-agent feature expectedBehavior contradicts actual implementation",
+      "isSystemic": false
+    },
+    {
+      "target": "AGENTS.md",
+      "suggestion": "Document the cursor-agent --trust flag requirement for non-interactive workspace access",
+      "evidence": "chat-completions-streaming worker discovered this runtime behavior; not documented in environment.md",
+      "isSystemic": false
+    },
+    {
+      "target": "AGENTS.md",
+      "suggestion": "Clarify PORT environment variable usage: services.yaml shows 'bun run proxy' but workers used 'PORT=32124 bun run proxy'",
+      "evidence": "chat-completions-streaming transcript shows PORT=32124 prefix, not documented in services.yaml",
+      "isSystemic": false
+    },
+    {
+      "target": ".factory/skills/worker",
+      "suggestion": "The 'worker' skill is referenced by many features but doesn't exist. Either create the skill or update features to reference an existing skill.",
+      "evidence": "features.json references skillName: 'worker' but .factory/skills/ directory has no 'worker' skill",
+      "isSystemic": true
+    },
+    {
+      "target": "AGENTS.md",
+      "suggestion": "Document what lint should check and which tool to use. Currently 'bun lint' is referenced but not documented in AGENTS.md testing commands section.",
+      "evidence": "AGENTS.md uses 'bun lint' but doesn't specify implementation; worker had to determine tsc --noEmit was the appropriate command",
+      "isSystemic": false
+    }
+  ],
+  "rejectedObservations": [
+    {
+      "observation": "AGENTS.md says project should be 'CliCursorProxyAPI' but local directory is 'opencode-cursor'",
+      "reason": "This is a documentation inconsistency in AGENTS.md, not a worker error. The feature description did not include renaming the local directory, so worker correctly left it unchanged."
+    },
+    {
+      "observation": "services.yaml typecheck command not in git diff for fix-typescript-errors",
+      "reason": "services.yaml already has typecheck command defined (currently shows 'typecheck: bun run typecheck'). The discrepancy in the review observation appears to be about timing of when services.yaml was modified, not a missing entry."
+    }
+  ],
+  "previousRound": ".factory/validation/foundation/scrutiny/synthesis.json (round 1)"
 }

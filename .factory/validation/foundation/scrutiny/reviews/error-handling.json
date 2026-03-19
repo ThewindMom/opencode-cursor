@@ -1,0 +1,39 @@
+{
+  "featureId": "error-handling",
+  "reviewedAt": "2026-03-19T19:35:00.000Z",
+  "commitId": "7a3c8f9",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": false,
+  "status": "pass",
+  "codeReview": {
+    "summary": "Comprehensive error handling implemented correctly. AgentError interface properly defines statusCode, type, and code fields. parseAgentError maps error types to correct HTTP status codes: 401 for auth failures, 429 for quota/rate limits, 400 for bad requests (invalid JSON, missing messages, unknown model), 500 for server errors. OpenAI-compliant error format used throughout.",
+    "issues": [
+      {
+        "file": "src/proxy/standalone-server.ts",
+        "line": 547,
+        "severity": "non_blocking",
+        "description": "Streaming errors (401, 429, 500) are delivered as SSE error chunks rather than HTTP status codes. This is an inherent SSE limitation - once streaming starts with 200, the HTTP status cannot be changed. Error messages are properly included in the chunk content with userMessage. This behavior is acceptable for SSE but verification steps did not confirm this for 401/429/500."
+      },
+      {
+        "file": "src/proxy/standalone-server.ts",
+        "line": 56,
+        "severity": "non_blocking",
+        "description": "parseAgentError relies on string matching in cursor-agent stderr output to detect error types. If cursor-agent changes its error message wording, detection could fail. No pre-validation of model parameter before spawning cursor-agent process."
+      }
+    ]
+  },
+  "sharedStateObservations": [
+    {
+      "area": "skills",
+      "observation": "Worker skill 'worker' was not found when invoked. Transcript shows 'Error: Skill \"worker\" not found'. Worker proceeded without the skill. skillFeedback indicates procedure was followed, but the skill wasn't available.",
+      "evidence": "Transcript skeleton shows: '## Tool: Skill\\n{\"skill\": \"worker\"}\\n## Tool Result\\nError: Skill \"worker\" not found'"
+    },
+    {
+      "area": "services",
+      "observation": "AGENTS.md documents 'lint: bun lint' as a command, but worker encountered 'Script not found lint' when running 'bun run lint'. Worker correctly fell back to 'bun tsc --noEmit' which is the actual lint command per package.json line 14.",
+      "evidence": "Transcript shows: 'bun run lint' failed with 'error: Script not found \"lint\"'. package.json line 14 shows: '\"lint\": \"tsc --noEmit\"'. Worker then ran 'bun tsc --noEmit' directly."
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "Error handling implementation is correct and comprehensive. The feature properly handles 400 (invalid JSON, missing messages), 401 (auth failures), 429 (rate limits), and 500 (server errors) with OpenAI-compliant error format. Non-blocking issue: streaming errors deliver error info via SSE chunks rather than HTTP status codes, which is correct SSE behavior. Verification was incomplete - only 400 errors were manually tested via curl; 401, 429, 500 were not manually verified despite being in the feature's verification steps."
+}

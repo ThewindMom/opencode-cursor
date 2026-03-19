@@ -1,0 +1,15 @@
+{
+  "featureId": "models-endpoint",
+  "reviewedAt": "2026-03-19T20:25:00.000Z",
+  "commitId": "4ab428e03c64c446e3b46c8e6fd6a4c0f1157ae5",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "pass",
+  "codeReview": {
+    "summary": "The /v1/models endpoint was already implemented in standalone-server.ts. The worker correctly identified that model objects were missing the 'name' field and added it. The implementation properly fetches models from 'cursor-agent models', parses the output using regex, and returns OpenAI-compatible model objects with id, name, object, created, and owned_by fields. The endpoint correctly works without authentication as required.",
+    "issues": []
+  },
+  "sharedStateObservations": [],
+  "addressesFailureFrom": null,
+  "summary": "Feature implementation passes review. The /v1/models endpoint correctly fetches models from 'cursor-agent models' CLI and exposes them in OpenAI-compatible format with both id and name fields. The worker followed proper procedure, ran build verification, and manually tested the endpoint with curl. No issues found."
+}

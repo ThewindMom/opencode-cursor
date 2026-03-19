@@ -1,0 +1,62 @@
+{
+  "featureId": "auth-flow-cursor-agent",
+  "reviewedAt": "2026-03-19T20:25:00.000Z",
+  "commitId": "07eb9c6",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "fail",
+  "codeReview": {
+    "summary": "Implementation partially covers the feature requirements. Auth file existence check works via verifyCursorAuth(), 401 errors are surfaced properly, and cursor-agent handles its own token internally. However, there are blocking discrepancies in handoff metadata and a mismatch between the feature's expected behavior ('Token is sent in Authorization header') and what the code actually does (cursor-agent reads auth files internally).",
+    "issues": [
+      {
+        "file": "handoff file",
+        "line": 0,
+        "severity": "blocking",
+        "description": "Handoff references commitId 'edb0ba8' which does not exist in the repository. The actual commit for this feature is '07eb9c6'. This is a metadata discrepancy that could cause confusion in tracking."
+      },
+      {
+        "file": "src/proxy/standalone-server.ts",
+        "line": 280,
+        "severity": "blocking",
+        "description": "Expected behavior states 'Token is sent in Authorization header to Cursor API' but the implementation never extracts a token from auth files and never sends an Authorization header. The cursor-agent CLI handles auth internally by reading ~/.cursor/auth.json or ~/.cursor/cli-config.json directly. This is a documentation/implementation mismatch - the expected behavior description does not match what the code actually does."
+      },
+      {
+        "file": "src/proxy/standalone-server.ts",
+        "line": 53,
+        "severity": "non_blocking",
+        "description": "parseAgentError() uses broad pattern matching ('auth', 'unauthorized') which could cause false positives. For example, a message containing 'unauthorized' in a different context would be treated as an auth error."
+      },
+      {
+        "file": "src/proxy/standalone-server.ts",
+        "line": 301,
+        "severity": "non_blocking",
+        "description": "Error response JSON has 'code: 401' but OpenAI API error format typically uses 'code' for error type strings, not numeric HTTP status codes. The proper field for HTTP status is 'status' (which is correctly used in other error responses in this file)."
+      },
+      {
+        "file": "src/proxy/standalone-server.ts",
+        "line": 511,
+        "severity": "non_blocking",
+        "description": "In streaming mode, auth errors are sent as content chunks ('cursor-proxy error: ...') rather than as proper SSE error events. This mixes error content with regular response content, which may confuse clients expecting clean error responses."
+      }
+    ]
+  },
+  "sharedStateObservations": [
+    {
+      "area": "skills",
+      "observation": "The feature references skillName 'worker' which does not exist in .factory/skills/. The worker skill is referenced by most features in features.json but no such skill directory exists.",
+      "evidence": "features.json line 49: skillName: 'worker'. .factory/skills/ contains: agent-browser, api-design, article-writing, backend-patterns, coding-standards, colgrep, content-engine, e2e-testing, eval-harness, frontend-design, frontend-patterns, frontend-slides, full-output, investor-materials, investor-outreach, market-research, redesign-frontend, security-review, strategic-compact, taste-frontend, tdd-workflow, verification-loop. No 'worker' skill."
+    },
+    {
+      "area": "conventions",
+      "observation": "AGENTS.md documents the mission overview and conventions but does not specify how authentication is supposed to work - specifically whether the proxy should extract and forward tokens or delegate to cursor-agent.",
+      "evidence": "AGENTS.md says cursor-agent CLI is used for Cursor API access but does not clarify the auth token flow. The feature's expectedBehavior says 'Token is sent in Authorization header' but implementation shows cursor-agent handles auth internally."
+    },
+    {
+      "area": "knowledge",
+      "observation": "Worker discovered that cursor-agent handles auth internally by reading auth files directly, but this knowledge was not captured in shared state. Future workers may incorrectly try to implement token extraction.",
+      "evidence": "Transcript skeleton shows worker read ~/.cursor/cli-config.json and agent-cli-state.json, and determined cursor-agent handles OAuth internally. This insight about cursor-agent's auth architecture is not documented anywhere in .factory/library/ or AGENTS.md."
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "The auth flow implementation correctly checks for cursor-agent authentication before processing requests and returns 401 with helpful messages. However, it fails because: (1) the handoff metadata references a non-existent commit, (2) the expected behavior description claims tokens are sent in Authorization headers but the implementation delegates auth to cursor-agent internally. The worker skill is missing. Token refresh/expiry is not explicitly handled - it's assumed to be cursor-agent's responsibility."
+}
