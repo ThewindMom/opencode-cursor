@@ -16,6 +16,8 @@ import { fileURLToPath } from "node:url";
 import { verifyCursorAuth } from "../auth.js";
 import { createToolLoopGuard, parseToolLoopMaxRepeat, type ToolLoopGuard } from "../provider/tool-loop-guard.js";
 import type { OpenAiToolCall } from "./tool-loop.js";
+import { McpClientManager, type McpToolInfo } from "../mcp/client-manager.js";
+import { readMcpConfigs } from "../mcp/config.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -36,6 +38,97 @@ try {
 
 const DEFAULT_PORT = 32124;
 const DEFAULT_HOST = "127.0.0.1";
+
+// MCP Bridge - global instance shared across requests
+let mcpClientManager: McpClientManager | null = null;
+let mcpInitialized = false;
+let mcpTools: Map<string, { serverName: string; toolName: string }> = new Map();
+
+/**
+ * Initialize the MCP bridge - connect to MCP servers configured in opencode.json
+ */
+async function initMcpBridge(): Promise<void> {
+  if (mcpInitialized) return;
+
+  try {
+    const configs = readMcpConfigs();
+    if (configs.length === 0) {
+      console.log("No MCP servers configured in opencode.json");
+      mcpInitialized = true;
+      return;
+    }
+
+    mcpClientManager = new McpClientManager();
+    console.log(`MCP bridge: connecting to ${configs.length} server(s)...`);
+
+    await Promise.allSettled(configs.map((c) => mcpClientManager!.connectServer(c)));
+
+    // Build lookup map for MCP tools
+    const tools = mcpClientManager.listTools();
+    for (const tool of tools) {
+      const namespacedName = `mcp__${tool.serverName}__${tool.name}`;
+      mcpTools.set(namespacedName, { serverName: tool.serverName, toolName: tool.name });
+    }
+
+    console.log(`MCP bridge: connected to ${mcpClientManager.connectedServers.length} server(s), discovered ${mcpTools.size} tool(s)`);
+    if (mcpTools.size > 0) {
+      const sampleTools = Array.from(mcpTools.keys()).slice(0, 5).join(", ");
+      console.log(`MCP tools available: ${sampleTools}${mcpTools.size > 5 ? "..." : ""}`);
+    }
+  } catch (err) {
+    console.warn("MCP bridge initialization failed:", String(err));
+  }
+
+  mcpInitialized = true;
+}
+
+/**
+ * Parse an MCP tool namespaced name to extract server and tool name
+ * Format: mcp__serverName__toolName
+ */
+function parseMcpToolName(namespacedName: string): { serverName: string; toolName: string } | null {
+  // Check if it matches the MCP namespace pattern
+  if (!namespacedName.startsWith("mcp__")) return null;
+
+  // Split by __ and extract serverName and toolName
+  // Format: mcp__serverName__toolName
+  const parts = namespacedName.split("__");
+  if (parts.length < 3) return null;
+
+  // First part is "mcp", rest is serverName__toolName
+  const serverName = parts[1];
+  const toolName = parts.slice(2).join("__"); // toolName might contain underscores
+
+  return { serverName, toolName };
+}
+
+/**
+ * Check if a tool name is an MCP tool
+ */
+function isMcpTool(toolName: string): boolean {
+  return mcpTools.has(toolName);
+}
+
+/**
+ * Execute an MCP tool via the MCP client manager
+ */
+async function executeMcpTool(namespacedName: string, args: Record<string, unknown>): Promise<string> {
+  if (!mcpClientManager) {
+    return "Error: MCP bridge not initialized";
+  }
+
+  const toolInfo = mcpTools.get(namespacedName);
+  if (!toolInfo) {
+    return `Error: MCP tool "${namespacedName}" not found`;
+  }
+
+  try {
+    const result = await mcpClientManager.callTool(toolInfo.serverName, toolInfo.toolName, args);
+    return result;
+  } catch (err: any) {
+    return `Error: MCP tool "${namespacedName}" failed: ${err?.message || String(err)}`;
+  }
+}
 
 interface ProxyConfig {
   port?: number;
@@ -537,6 +630,14 @@ async function handleChatCompletions(
   const toolLoopGuard: ToolLoopGuard = createToolLoopGuard(messages, maxRepeat);
   let loopGuardTriggered = false;
 
+  // Queue for MCP tool calls that need to be executed after buffer processing
+  interface QueuedMcpTool {
+    toolName: string;
+    toolCallId: string;
+    arguments: string;
+  }
+  const mcpToolQueue: QueuedMcpTool[] = [];
+
   const lineBuffer: string[] = [];
   let buffer = "";
   let stderrBuffer = "";
@@ -610,6 +711,31 @@ async function handleChatCompletions(
             return;
           }
 
+          // Check if this is an MCP tool - if so, queue it for later execution
+          if (isMcpTool(toolName)) {
+            // Queue the MCP tool for async execution
+            mcpToolQueue.push({
+              toolName,
+              toolCallId,
+              arguments: toolCall.function.arguments,
+            });
+            // Still forward the tool call to the client so it knows about it
+            const callChunk = createChunk(state.id, state.created, state.model, {
+              tool_calls: [{
+                index: 0,
+                id: toolCallId,
+                type: "function",
+                function: {
+                  name: toolName,
+                  arguments: toolCall.function.arguments,
+                },
+              }],
+            });
+            res.write(formatSseChunk(callChunk));
+            continue;
+          }
+
+          // Not an MCP tool - forward to client as usual
           const chunk = createChunk(state.id, state.created, state.model, {
             tool_calls: [{
               index: 0,
@@ -627,7 +753,7 @@ async function handleChatCompletions(
     }
   };
 
-  child.on("close", (code) => {
+  child.on("close", async (code) => {
     // Skip processing if loop guard was triggered (already sent error)
     if (loopGuardTriggered) {
       return;
@@ -654,6 +780,34 @@ async function handleChatCompletions(
       buffer = "";
     }
     processBuffer();
+
+    // Process queued MCP tools
+    for (const mcpTool of mcpToolQueue) {
+      // Parse arguments
+      let parsedArgs: Record<string, unknown> = {};
+      try {
+        parsedArgs = JSON.parse(mcpTool.arguments || "{}");
+      } catch {
+        // If arguments can't be parsed, execute with empty args
+      }
+
+      // Execute MCP tool
+      const mcpResult = await executeMcpTool(mcpTool.toolName, parsedArgs);
+
+      // Send the tool result back
+      const resultChunk = createChunk(state.id, state.created, state.model, {
+        tool_calls: [{
+          index: 0,
+          id: mcpTool.toolCallId,
+          type: "function",
+          function: {
+            name: mcpTool.toolName,
+            content: mcpResult,
+          },
+        }],
+      });
+      res.write(formatSseChunk(resultChunk));
+    }
 
     // Send final buffers if not already sent via partials
     if (!state.sawAssistantPartials && state.assistantBuffer) {
@@ -743,7 +897,12 @@ async function handleRequest(
     res.end(JSON.stringify({
       status: "ok",
       version: "2.3.20",
-      auth: isAuthenticated ? "authenticated" : "not_authenticated"
+      auth: isAuthenticated ? "authenticated" : "not_authenticated",
+      mcp: {
+        enabled: mcpInitialized,
+        servers: mcpClientManager?.connectedServers.length ?? 0,
+        tools: mcpTools.size,
+      }
     }));
     return;
   }
@@ -758,6 +917,41 @@ async function handleRequest(
       const message = err instanceof Error ? err.message : String(err);
       res.writeHead(500, { "Content-Type": "application/json" });
       res.end(JSON.stringify({ error: `Failed to fetch models: ${message}` }));
+    }
+    return;
+  }
+
+  // MCP Tools endpoint - list available MCP tools
+  if ((path === "/v1/tools" || path === "/tools") && req.method === "GET") {
+    try {
+      // Ensure MCP bridge is initialized
+      if (!mcpInitialized) {
+        await initMcpBridge();
+      }
+
+      const tools: Array<{ id: string; name: string; server: string; description?: string; inputSchema?: Record<string, unknown> }> = [];
+
+      for (const [namespacedName, toolInfo] of mcpTools.entries()) {
+        tools.push({
+          id: namespacedName,
+          name: toolInfo.toolName,
+          server: toolInfo.serverName,
+        });
+      }
+
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({
+        object: "list",
+        data: tools,
+        mcp: {
+          servers: mcpClientManager?.connectedServers.length ?? 0,
+          tools: mcpTools.size,
+        }
+      }));
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      res.writeHead(500, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: `Failed to fetch tools: ${message}` }));
     }
     return;
   }
@@ -794,7 +988,10 @@ export async function startProxyServer(config: ProxyConfig = {}): Promise<{ base
       reject(err);
     });
 
-    server.listen(port, host, () => {
+    server.listen(port, host, async () => {
+      // Initialize MCP bridge on startup
+      await initMcpBridge();
+
       const baseURL = `http://${host}:${port}`;
       console.log(`Standalone proxy server started on ${baseURL}`);
       console.log(`Workspace directory: ${workspaceDir}`);
