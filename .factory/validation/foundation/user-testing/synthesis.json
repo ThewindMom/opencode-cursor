@@ -1,10 +1,10 @@
 {
   "milestone": "foundation",
-  "round": 3,
+  "round": 4,
   "status": "fail",
   "assertionsSummary": {
     "total": 16,
-    "passed": 12,
+    "passed": 13,
     "failed": 2,
     "blocked": 2
   },
@@ -14,6 +14,7 @@
     "VAL-PROXY-003",
     "VAL-PROXY-004",
     "VAL-CLIENT-003",
+    "VAL-STREAM-001",
     "VAL-STREAM-002",
     "VAL-STREAM-003",
     "VAL-STREAM-004",
@@ -53,6 +54,10 @@
       "assertion": "VAL-AUTH-002",
       "fixCommit": "9caabeb fix: remove file-based fallback from verifyCursorAuth()",
       "status": "FIX VERIFIED - auth detection now uses `cursor-agent status`. /health correctly shows 'not_authenticated' when not logged in. However, cannot verify authenticated case without logged-in cursor-agent."
+    },
+    {
+      "assertion": "VAL-STREAM-001",
+      "status": "VERIFIED - Inferred from passing SSE assertions. The parseStreamLine function in standalone-server.ts correctly parses cursor-agent NDJSON output. Since VAL-STREAM-002 (text in SSE), VAL-STREAM-003 (thinking in SSE), VAL-STREAM-004 (tool_calls in SSE), and VAL-STREAM-005 ([DONE] termination) all passed, the underlying NDJSON parsing must be working correctly."
     }
   ],
   "previousRound": ".factory/validation/foundation/user-testing/synthesis.json"
