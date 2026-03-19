@@ -2,7 +2,7 @@
 
 **Universal Cursor Proxy Gateway** — Enable any OpenAI-compatible client to use Cursor Pro subscription models.
 
-[![License: BSD-3-Clause](https://img.shields.io/badge/License-BSD--3--Clause-blue.svg)](LICENSE)
+[![License: ISC](https://img.shields.io/badge/License-ISC-blue.svg)](LICENSE)
 [![Port: 32124](https://img.shields.io/badge/Port-32124-32124)](#)
 
 ## Overview
@@ -60,7 +60,7 @@ CliCursorProxyAPI is a standalone proxy server that provides OpenAI-compatible R
 ### 1. Install & Build
 
 ```bash
-git clone https://github.com/ThewindMom/CliCursorProxyAPI.git
+git clone https://github.com/ThewindMom/opencode-cursor.git
 cd CliCursorProxyAPI
 bun install
 bun run build
