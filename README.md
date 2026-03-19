@@ -217,38 +217,6 @@ curl -X POST http://localhost:32124/v1/chat/completions \
   -d '{"model":"sonnet-4.6","messages":[{"role":"user","content":"Hi"}],"stream":false}'
 ```
 
-### pi.dev / oh-my-pi (Extension-based)
-
-Both pi.dev and oh-my-pi use the same extension API. Create an extension file:
-
-```typescript
-// ~/.pi/extensions/cursor-acp.ts (pi.dev)
-// or in your oh-my-pi extensions directory
-import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";  // pi.dev
-// or "@oh-my-pi/pi-coding-agent" for oh-my-pi
-
-export default function (pi: ExtensionAPI) {
-  pi.registerProvider("cursor-acp", {
-    baseUrl: "http://127.0.0.1:32124/v1",
-    apiKey: "dummy",  // Required but ignored
-    api: "openai-completions",
-    models: [
-      { id: "auto", name: "Auto", reasoning: true, input: ["text", "image"],
-        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-        contextWindow: 200000, maxTokens: 16384 },
-      { id: "composer-2-fast", name: "Composer 2 Fast", reasoning: false, input: ["text"],
-        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-        contextWindow: 200000, maxTokens: 16384 },
-      { id: "sonnet-4.6", name: "Sonnet 4.6", reasoning: false, input: ["text", "image"],
-        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-        contextWindow: 200000, maxTokens: 16384 },
-    ]
-  });
-}
-```
-
-Reload the agent after adding the extension.
-
 ### Claude Code (Not Supported)
 
 Claude Code **only supports Anthropic Messages API format**. CliCursorProxyAPI provides OpenAI-compatible API. These are incompatible without additional translation layer.
@@ -458,7 +426,7 @@ CliCursorProxyAPI/
 │       └── sync.ts             # Model list sync
 ├── docs/
 │   ├── OPENCODE.md             # OpenCode integration
-│   ├── OH-MY-PI.md             # oh-my-pi integration
+
 │   ├── FACTORY-DROID.md        # Factory Droid integration
 │   └── architecture/           # Architecture docs
 ├── tests/
@@ -505,6 +473,6 @@ ISC — See [LICENSE](LICENSE)
 
 - [cursor-agent CLI](https://cursor.com)
 - [OpenCode](https://opencode.ai)
-- [oh-my-pi](https://github.com/can1357/oh-my-pi)
+
 - [Factory Droids](https://github.com/FactoryMachines/factory-droids)
 - [OpenAI Chat Completions API](https://platform.openai.com/docs/api-reference/chat)
