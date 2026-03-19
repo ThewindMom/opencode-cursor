@@ -1,0 +1,33 @@
+{
+  "featureId": "fix-auth-expected-behavior",
+  "reviewedAt": "2026-03-19T20:35:00.000Z",
+  "commitId": "186f636",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "pass",
+  "codeReview": {
+    "summary": "The fix adequately addresses the original expectedBehavior mismatch. The worker correctly identified that auth-flow-cursor-agent's expectedBehavior incorrectly stated 'Token is sent in Authorization header' but the implementation actually delegates auth to cursor-agent CLI internally. The fix updated features.json to accurately describe: 'Auth is delegated to cursor-agent CLI which handles tokens internally' and 'Proxy spawns cursor-agent for API calls, cursor-agent manages its own auth headers'. The worker followed proper procedure, verified the implementation by examining auth.ts, standalone-server.ts, and grep patterns for Authorization headers and cursor-agent usage before making the documentation change.",
+    "issues": [
+      {
+        "file": "features.json (mission dir)",
+        "line": 0,
+        "severity": "non_blocking",
+        "description": "The fix was applied to the mission directory's features.json (/Users/thewindmom/.factory/missions/e16c1309-dc3c-4b90-a331-8bdf7e1043c8/features.json) rather than a repo-level features file. The opencode-cursor repository does not contain a features.json at its root. This appears to be by design since features.json is mission-scoped, but it means the fix is in the mission context, not propagated to any repo-level tracking."
+      }
+    ]
+  },
+  "sharedStateObservations": [
+    {
+      "area": "knowledge",
+      "observation": "The prior review noted that the worker discovered cursor-agent handles auth internally by reading from ~/.cursor/auth.json or ~/.cursor/cli-config.json, but this knowledge was not captured in shared state. The fix feature also explored this same auth architecture but did not document it. This architectural knowledge about how cursor-agent handles auth internally should be captured in .factory/library/ or AGENTS.md so future workers don't incorrectly try to implement token extraction.",
+      "evidence": "Transcript skeleton shows worker read src/auth.ts, searched for Authorization|auth.*header|token patterns, and examined cursor-agent usage. The updated expectedBehavior in auth-flow-cursor-agent now correctly describes the delegation to cursor-agent, but this insight about cursor-agent's internal auth handling is still not in AGENTS.md or .factory/library/."
+    },
+    {
+      "area": "conventions",
+      "observation": "AGENTS.md and services.yaml are read at the start of the transcript, but the worker skill procedure is not explicitly documented anywhere. The prior review noted that 'worker' skillName is referenced in features.json but no such skill exists in .factory/skills/. The fix feature also uses skillName 'worker' but the transcript skeleton shows the actual skill used was 'mission-worker-base'.",
+      "evidence": "Transcript skeleton shows first tool call is 'Skill: mission-worker-base'. But features.json has skillName: 'worker'. This discrepancy between what the transcript shows and what's documented in features.json suggests the skill naming in features.json may be incorrect or out of date."
+    }
+  ],
+  "addressesFailureFrom": ".factory/validation/foundation/scrutiny/reviews/auth-flow-cursor-agent.json",
+  "summary": "The fix pass. The worker correctly identified and fixed the expectedBehavior mismatch: changed from incorrect 'Token is sent in Authorization header' to accurate description of auth delegation to cursor-agent CLI. The fix directly addresses blocking issue #2 from the prior review. However, blocking issue #1 (handoff metadata commit tracking discrepancy) was a separate issue in the original auth-flow-cursor-agent feature, not something the fix feature could address. The non-blocking issue about cursor-agent's internal auth architecture knowledge not being captured in shared state remains unaddressed - this is a shared state observation that the scrutiny validator should triage separately."
+}

@@ -1,0 +1,15 @@
+{
+  "featureId": "fix-chat-error-handling",
+  "reviewedAt": "2026-03-19T20:24:00.000Z",
+  "commitId": "dcf2a58f699eb3a0fdb156261ccb2c59cb9330d4",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "pass",
+  "codeReview": {
+    "summary": "Fix correctly addresses the non-streaming error handling bug identified in chat-completions-streaming. The condition changed from `if (code !== 0 && !stdout)` to `if (code !== 0)`, ensuring non-zero exit codes are always treated as errors regardless of stdout content. Added a clarifying comment. Verification completed with build, typecheck, and tests.",
+    "issues": []
+  },
+  "sharedStateObservations": [],
+  "addressesFailureFrom": "/Users/thewindmom/Developer/01_Random_Coding/opencode-cursor/.factory/validation/foundation/scrutiny/reviews/chat-completions-streaming.json",
+  "summary": "The fix-chat-error-handling feature correctly addresses the blocking issue from the original chat-completions-streaming review. The bug at line ~407 (originally ~355 after the original 42-line addition) where `if (code !== 0 && !stdout)` silently ignored non-zero exit codes with partial stdout is now fixed. The worker changed the condition to `if (code !== 0)` with a comment explaining that non-zero exit always indicates an error. The fix was verified with `bun run build`, `npx tsc --noEmit`, and `bun test` (499 tests passed). The worker followed procedure correctly per skillFeedback. No additional issues found."
+}
