@@ -227,6 +227,21 @@ CliCursorProxyAPI/
 - **No plugin dependency** — Works with any OpenAI-compatible client
 - **Factory Droid support** — Service manifest for agent orchestration
 
+## What We Don't Have (vs Nomadcxx/opencode-cursor)
+
+This is a standalone proxy fork. The upstream has these features that we removed:
+
+| Feature | Upstream | This Fork |
+|---------|----------|-----------|
+| One-line installer | `curl ... install.sh \| bash` | Not applicable |
+| OpenCode plugin entry | `dist/plugin-entry.js` | Not applicable |
+| MCP tool bridge (mcptool) | Via `mcptool` CLI | Not implemented |
+| Model sync script | `scripts/sync-models.sh` | Not applicable |
+| Auto-install models | `cursor-agent models` sync | Manual config |
+| OpenCode `/auth` integration | Built-in | Manual proxy setup |
+
+If you need the OpenCode plugin experience with automatic MCP bridging, use the [upstream](https://github.com/Nomadcxx/opencode-cursor) instead.
+
 ## Comparison with Alternatives
 
 | Feature | CliCursorProxyAPI | Nomadcxx/opencode-cursor |
