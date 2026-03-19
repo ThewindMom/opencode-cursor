@@ -1,0 +1,15 @@
+{
+  "id": "chatcmpl-*",
+  "object": "chat.completion",
+  "created": *,
+  "model": "auto",
+  "choices": [{
+    "index": 0,
+    "message": {
+      "role": "assistant",
+      "content": "*",
+      "reasoning_content": "*"
+    },
+    "finish_reason": "stop"
+  }]
+}

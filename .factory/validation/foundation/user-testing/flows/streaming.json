@@ -1,0 +1,81 @@
+{
+  "groupId": "streaming",
+  "testedAt": "2026-03-19T20:45:00.000Z",
+  "isolation": {
+    "proxyUrl": "http://localhost:32124",
+    "authenticatedVia": "cursor-agent"
+  },
+  "toolsUsed": ["curl"],
+  "assertions": [
+    {
+      "id": "VAL-STREAM-002",
+      "title": "SSE conversion preserves text content",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "POST /v1/chat/completions with stream:true and simple prompt",
+          "expected": "Text content appears in SSE delta.content fields",
+          "observed": "Text content appeared correctly: 'Hello', ' world', ',', ' friend' streamed as separate SSE events"
+        }
+      ],
+      "evidence": {
+        "streamOutput": "foundation/streaming/VAL-STREAM-002-test.txt",
+        "networkTrace": "POST /v1/chat/completions -> 200 with SSE stream"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-STREAM-003",
+      "title": "Thinking content is preserved",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "POST /v1/chat/completions with stream:true and reasoning-requiring prompt",
+          "expected": "Thinking appears in SSE as reasoning_content field",
+          "observed": "reasoning_content field present in SSE events with step-by-step reasoning text"
+        }
+      ],
+      "evidence": {
+        "streamOutput": "foundation/streaming/VAL-STREAM-003-reasoning-test.txt",
+        "sampleContent": "reasoning_content contained: '**Explaining reasoning steps**\\n\\nI need to provide step-by-step reasoning...'"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-STREAM-004",
+      "title": "Tool calls are extracted and formatted",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "POST /v1/chat/completions with stream:true and file-query prompt",
+          "expected": "Tool calls appear in SSE as tool_calls array with name and arguments",
+          "observed": "tool_calls array present with function name 'shell' and arguments JSON containing command details"
+        }
+      ],
+      "evidence": {
+        "streamOutput": "foundation/streaming/VAL-STREAM-004-test.txt",
+        "sampleContent": "tool_calls contained: {index:0, id:'call_...', type:'function', function:{name:'shell', arguments:'{\\\"command\\\":\\\"ls -la\\\"...}'}}"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-STREAM-005",
+      "title": "Stream terminates properly with [DONE]",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Verify SSE stream ending",
+          "expected": "Final message is 'data: [DONE]'",
+          "observed": "All tested streams ended with 'data: [DONE]' message"
+        }
+      ],
+      "evidence": {
+        "networkTrace": "All streaming responses terminated with data: [DONE]"
+      },
+      "issues": null
+    }
+  ],
+  "frictions": [],
+  "blockers": [],
+  "summary": "Tested 4 assertions (VAL-STREAM-002 through VAL-STREAM-005): All passed. SSE streaming format correctly preserves text content in delta.content, thinking content in reasoning_content field, tool calls in tool_calls array, and streams properly terminate with data: [DONE]."
+}

@@ -1,0 +1,1 @@
+{"error":{"message":"Cannot use this model: nonexistent-model-xyz. Available models: auto, composer-2-fast, composer-2, composer-1.5, gpt-5.3-codex-low, gpt-5.3-codex-low-fast, gpt-5.3-codex, gpt-5.3-codex-fast, gpt-5.3-c","type":"internal_error","code":"server_error","status":500}}

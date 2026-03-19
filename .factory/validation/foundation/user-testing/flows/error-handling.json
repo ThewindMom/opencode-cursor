@@ -1,0 +1,56 @@
+{
+  "groupId": "error-handling",
+  "testedAt": "2026-03-19T20:35:00Z",
+  "isolation": {
+    "proxyUrl": "http://localhost:32124",
+    "credentials": "cursor-agent authenticated"
+  },
+  "toolsUsed": ["curl"],
+  "assertions": [
+    {
+      "id": "VAL-ERROR-001",
+      "title": "Invalid request returns 400",
+      "status": "pass",
+      "steps": [
+        { "action": "curl -X POST with malformed JSON", "expected": "HTTP 400", "observed": "HTTP 400" },
+        { "action": "Check response body", "expected": "Error message with details", "observed": "Error message present" }
+      ],
+      "evidence": {
+        "responseFile": "foundation/error-handling/VAL-ERROR-001-response.txt",
+        "network": "POST /v1/chat/completions with invalid JSON -> 400"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-ERROR-002",
+      "title": "Quota exceeded is detected",
+      "status": "blocked",
+      "steps": [],
+      "evidence": {},
+      "issues": "Cannot test without triggering real quota limit. Would require actual API usage to hit quota threshold."
+    },
+    {
+      "id": "VAL-ERROR-003",
+      "title": "Model not found error",
+      "status": "fail",
+      "steps": [
+        { "action": "curl -X POST with model=nonexistent-model-xyz", "expected": "HTTP 400", "observed": "HTTP 500" },
+        { "action": "Check response body", "expected": "Error message about unknown model", "observed": "Error message present but wrong status code" }
+      ],
+      "evidence": {
+        "responseFile": "foundation/error-handling/VAL-ERROR-003-response.txt",
+        "network": "POST /v1/chat/completions with unknown model -> 500 (expected 400)"
+      },
+      "issues": "Returns HTTP 500 instead of HTTP 400 for unknown model. Error message is correct and lists available models, but status code violates OpenAI API spec which requires 400 for invalid request errors."
+    }
+  ],
+  "frictions": [],
+  "blockers": [
+    {
+      "description": "Cannot test quota exceeded without hitting actual usage limits",
+      "affectedAssertions": ["VAL-ERROR-002"],
+      "quickFixAttempted": "N/A - requires production API interaction"
+    }
+  ],
+  "summary": "Tested 3 assertions: 1 passed (VAL-ERROR-001), 1 blocked (VAL-ERROR-002), 1 failed (VAL-ERROR-003 returns 500 instead of 400 for unknown model)"
+}

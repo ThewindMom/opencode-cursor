@@ -1,15 +1,19 @@
-commands:
-  install: bun install
-  build: bun run build
-  test: bun test
-  lint: bun lint
-  dev: bun run proxy
-  typecheck: bun run typecheck
+# Services for CliCursorProxyAPI
 
 services:
-  proxy:
-    start: bun run proxy
-    stop: lsof -ti :32124 | xargs kill
-    healthcheck: curl -sf http://localhost:32124/health
+  cursor-proxy:
+    name: cursor-proxy
+    description: Standalone proxy server for Cursor API
+    type: web-server
     port: 32124
+    host: 127.0.0.1
+    start: |
+      cd /Users/thewindmom/Developer/01_Random_Coding/opencode-cursor && bun run proxy
+    stop: |
+      pkill -f "bun run proxy" || pkill -f "standalone-server" || true
+    healthcheck: |
+      curl -sf http://localhost:32124/health || exit 1
     depends_on: []
+    notes: |
+      Requires cursor-agent to be installed and authenticated.
+      Run `cursor-agent login` if health check fails with auth error.

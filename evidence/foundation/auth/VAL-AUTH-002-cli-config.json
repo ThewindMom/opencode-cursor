@@ -1,0 +1,22 @@
+{
+  "permissions": {
+    "allow": ["Shell(ls)"],
+    "deny": []
+  },
+  "version": 1,
+  "editor": { "vimMode": false },
+  "model": {
+    "modelId": "default",
+    "displayModelId": "auto",
+    "displayName": "Auto"
+  },
+  "hasChangedDefaultModel": true,
+  "authInfo": {
+    "email": "thewind1997@hotmail.de",
+    "displayName": "Thewind Mom",
+    "userId": 191631476,
+    "authId": "auth0|user_01JS3T9582CERV5AS4485A8RF1"
+  },
+  "network": { "useHttp1ForAgent": false },
+  "approvalMode": "allowlist"
+}

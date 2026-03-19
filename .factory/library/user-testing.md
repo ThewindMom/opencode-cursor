@@ -1,50 +1,80 @@
-# User Testing
+# User Testing Guide for CliCursorProxyAPI
 
-## Testing Surfaces
+## Testing Surface: HTTP REST API (curl)
 
-### 1. curl (Universal)
-- **Tool**: Standard curl command
-- **Setup**: None (just needs running proxy)
-- **What to test**: All endpoints work with basic HTTP
+All assertions in the foundation milestone are tested via HTTP requests to the proxy server.
 
-### 2. OpenCode
-- **Tool**: OpenCode TUI with @ai-sdk/openai-compatible
-- **Setup**: Configure opencode.json provider
-- **What to test**: Model selection, chat, tool calling
+### Proxy URL
+- Base URL: `http://localhost:32124`
+- All endpoints accept JSON request/response
 
-### 3. Browser (optional)
-- **Tool**: Browser for any web interfaces
-- **Setup**: None if proxy has admin UI
-- **What to test**: N/A for this project
+### Testing Tool
+- **curl** - for all HTTP testing
+- No browser automation needed for foundation milestone
+- No terminal automation needed for foundation milestone
+
+### Test Commands
+
+#### Health Check
+```bash
+curl -s http://localhost:32124/health
+# Expected: {"status":"ok","version":"2.3.20","auth":"authenticated"}
+```
+
+#### List Models
+```bash
+curl -s http://localhost:32124/v1/models
+# Expected: JSON with object:"list" and data array of models
+```
+
+#### Chat Completions (Streaming)
+```bash
+curl -s -X POST http://localhost:32124/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{"model":"auto","messages":[{"role":"user","content":"Say hello"}],"stream":true}'
+# Expected: SSE stream with data: {...}\n\n format, ends with data: [DONE]
+```
+
+#### Error Cases
+```bash
+# Invalid JSON
+curl -s -X POST http://localhost:32124/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d 'not valid json'
+# Expected: 400
+
+# Missing messages
+curl -s -X POST http://localhost:32124/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{"model":"auto"}'
+# Expected: 400
+
+# Unknown model
+curl -s -X POST http://localhost:32124/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{"model":"nonexistent-model","messages":[{"role":"user","content":"hi"}]}'
+# Expected: 400
+```
 
 ## Validation Concurrency
 
-- **Max concurrent validators**: 3
-- **Rationale**: Resource-intensive operations (cursor-agent spawns) per validator
+**Max concurrent validators**: 3
 
-## Test Scenarios
+The proxy is a stateless HTTP server. Multiple curl requests can run concurrently against different endpoints without interference. The only shared state is the cursor-agent subprocess which handles its own concurrency.
 
-### Basic Flow
-1. Start proxy: `bun run proxy`
-2. Health check: `curl http://localhost:32124/health`
-3. List models: `curl http://localhost:32124/v1/models`
-4. Chat: `curl -X POST http://localhost:32124/v1/chat/completions -d '...'`
+## Flow Validator Guidance: HTTP API
 
-### Auth Flow
-1. Run `cursor-agent login`
-2. Verify proxy accepts authenticated requests
-3. Verify proxy rejects without auth
+### Isolation Rules
+- Each flow validator tests assertions independently
+- No shared state between validators
+- cursor-agent handles authentication internally (no conflict)
+- Safe to run up to 3 validators concurrently
 
-### Tool Call Flow
-1. Send prompt that triggers tool use
-2. Verify tool_calls appear in stream
-3. Send tool result back
-4. Verify continuation
+### What to Avoid
+- Do not run multiple streaming chat requests simultaneously on the same validator (hard to parse)
+- Each assertion group should run its tests sequentially within the subagent
 
-## Resource Classification
-
-| Surface | Memory/CPU | Notes |
-|---------|-------------|-------|
-| curl | Minimal | Just HTTP client |
-| OpenCode | Medium | Full IDE integration |
-| Proxy server | Low | Node.js process |
+### Evidence Collection
+- Save raw curl output to evidence files
+- Capture HTTP status codes
+- For streaming, capture first 5 lines and last 3 lines

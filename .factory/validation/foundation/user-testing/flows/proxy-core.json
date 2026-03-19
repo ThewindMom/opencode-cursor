@@ -1,0 +1,88 @@
+{
+  "groupId": "proxy-core",
+  "testedAt": "2026-03-19T20:35:00Z",
+  "isolation": {
+    "proxyUrl": "http://localhost:32124",
+    "authRequired": false,
+    "authenticatedAs": "cursor-agent"
+  },
+  "toolsUsed": ["curl"],
+  "assertions": [
+    {
+      "id": "VAL-PROXY-001",
+      "title": "Health endpoint responds correctly",
+      "status": "pass",
+      "steps": [
+        { "action": "curl http://localhost:32124/health", "expected": "HTTP 200 with {\"status\":\"ok\"}", "observed": "HTTP 200 with {\"status\":\"ok\",\"version\":\"2.3.20\",\"auth\":\"authenticated\"}" }
+      ],
+      "evidence": {
+        "files": ["foundation/proxy-core/VAL-PROXY-001-health.json"],
+        "network": "GET /health -> 200",
+        "responseBody": "{\"status\":\"ok\",\"version\":\"2.3.20\",\"auth\":\"authenticated\"}"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-PROXY-002",
+      "title": "Models endpoint lists available models",
+      "status": "pass",
+      "steps": [
+        { "action": "curl http://localhost:32124/v1/models", "expected": "HTTP 200 with model list array containing id and name fields", "observed": "HTTP 200 with {\"object\":\"list\",\"data\":[...]} containing 49 models with id and name fields" }
+      ],
+      "evidence": {
+        "files": ["foundation/proxy-core/VAL-PROXY-002-models.json"],
+        "network": "GET /v1/models -> 200",
+        "modelCount": 49,
+        "sampleModels": ["auto", "composer-2-fast", "gpt-5.3-codex", "sonnet-4.6", "opus-4.6"]
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-PROXY-003",
+      "title": "Chat completions accepts valid OpenAI request",
+      "status": "pass",
+      "steps": [
+        { "action": "curl -X POST http://localhost:32124/v1/chat/completions -d '{\"model\":\"auto\",\"messages\":[{\"role\":\"user\",\"content\":\"Hello\"}],\"stream\":true}'", "expected": "HTTP 200 with streaming response", "observed": "HTTP 200 with SSE stream containing chat completion chunks" }
+      ],
+      "evidence": {
+        "files": ["foundation/proxy-core/VAL-PROXY-003-chat-request.json"],
+        "network": "POST /v1/chat/completions -> 200",
+        "streamStarted": true,
+        "chunkCount": 72
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-PROXY-004",
+      "title": "Streaming response format is SSE-compliant",
+      "status": "pass",
+      "steps": [
+        { "action": "Examine SSE format in chat completion response", "expected": "data: prefix with proper newline termination", "observed": "All chunks use 'data: {\"id\":\"...\",\"choices\":[...]}\n\n' format with proper SSE formatting" }
+      ],
+      "evidence": {
+        "files": ["foundation/proxy-core/VAL-PROXY-003-chat-request.json"],
+        "sseFormat": "data: JSON\n\n",
+        "streamTerminates": true,
+        "doneMessage": "data: [DONE]"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-CLIENT-003",
+      "title": "Model list accessible without auth",
+      "status": "pass",
+      "steps": [
+        { "action": "curl -H 'Authorization: Bearer invalid-token' http://localhost:32124/v1/models", "expected": "HTTP 200 with model list (no auth required)", "observed": "HTTP 200 with model list even with invalid auth token" }
+      ],
+      "evidence": {
+        "files": ["foundation/proxy-core/VAL-CLIENT-003-models-noauth.json"],
+        "network": "GET /v1/models (invalid auth) -> 200",
+        "modelCount": 49
+      },
+      "issues": null
+    }
+  ],
+  "frictions": [],
+  "blockers": [],
+  "summary": "Tested 5 assertions: 5 passed. All proxy core endpoints are working correctly - health returns ok, models endpoint lists 49 models, chat completions accepts requests and returns SSE stream, streaming format is SSE-compliant, and model list is accessible without authentication."
+}
