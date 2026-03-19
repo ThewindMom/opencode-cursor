@@ -1,0 +1,96 @@
+{
+  "groupId": "round3-fix-verification",
+  "testedAt": "2026-03-19T20:50:00.000Z",
+  "isolation": {
+    "proxyUrl": "http://localhost:32124",
+    "cursorAgentAuthenticated": false,
+    "cursorAgentStatus": "Not logged in"
+  },
+  "toolsUsed": ["curl"],
+  "assertions": [
+    {
+      "id": "VAL-ERROR-003",
+      "title": "Model not found error",
+      "status": "pass",
+      "steps": [
+        { "action": "curl POST /v1/chat/completions with model=nonexistent-model-xyz", "expected": "HTTP 400", "observed": "HTTP 400" },
+        { "action": "Check response body", "expected": "error.type=invalid_request_error, code=model_not_found", "observed": "error.code=model_not_found, status=400" }
+      ],
+      "evidence": {
+        "response": "{\"error\":{\"message\":\"Unknown model: nonexistent-model-xyz\",\"type\":\"invalid_request_error\",\"code\":\"model_not_found\",\"status\":400}}",
+        "network": "POST /v1/chat/completions with unknown model -> 400"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-AUTH-002",
+      "title": "Auth file detection works cross-platform",
+      "status": "fail",
+      "steps": [
+        { "action": "Verify fix: check verifyCursorAuth() implementation", "expected": "Uses cursor-agent status, not file-based fallback", "observed": "Uses `cursor-agent status` command, file-based fallback removed" },
+        { "action": "Check /health endpoint auth status", "expected": "Shows not_authenticated when cursor-agent is not logged in", "observed": "{\"auth\":\"not_authenticated\"} - correct!" },
+        { "action": "Check cli-config.json content", "expected": "Contains access token", "observed": "cli-config.json contains only user settings (permissions, editor, model) - NO access token" }
+      ],
+      "evidence": {
+        "healthResponse": "{\"status\":\"ok\",\"version\":\"2.3.20\",\"auth\":\"not_authenticated\"}",
+        "cliConfig": "Only contains: permissions, editor, model preferences - NO auth tokens",
+        "network": "cursor-agent is NOT logged in"
+      },
+      "issues": "The fix for VAL-AUTH-002 is correct - auth detection now properly uses `cursor-agent status`. However, the underlying issue remains: when cursor-agent IS authenticated, the tokens are stored internally by cursor-agent and not in ~/.cursor/ files. The fix correctly handles the NOT authenticated case. Cannot verify authenticated case without logged-in cursor-agent."
+    },
+    {
+      "id": "VAL-AUTH-003",
+      "title": "Auth token extraction from CLI config",
+      "status": "fail",
+      "steps": [
+        { "action": "Examine ~/.cursor/cli-config.json", "expected": "Contains access token", "observed": "Contains ONLY user settings: permissions, editor, model, network, sandbox, attribution - NO access token field" },
+        { "action": "Verify fix: file-based fallback removed from verifyCursorAuth()", "expected": "No longer relies on file existence for auth", "observed": "verifyCursorAuth() now only calls `cursor-agent status`, no file-based fallback" }
+      ],
+      "evidence": {
+        "cliConfigFields": ["permissions", "version", "editor", "model", "hasChangedDefaultModel", "maxMode", "network", "approvalMode", "sandbox", "attribution"],
+        "missingFields": ["access_token", "auth_token", "token", "bearer_token"],
+        "network": "cursor-agent stores tokens internally, not in ~/.cursor/"
+      },
+      "issues": "VAL-AUTH-003 CANNOT be satisfied by design. cursor-agent does not store access tokens in ~/.cursor/cli-config.json or any other file in ~/.cursor/. Tokens are stored internally by cursor-agent's own mechanism. The fix correctly removes the incorrect file-based fallback. The assertion itself may need to be marked as non-testable or reworded to reflect the actual architecture."
+    },
+    {
+      "id": "VAL-PROXY-005",
+      "title": "Proxy handles missing auth gracefully",
+      "status": "blocked",
+      "steps": [
+        { "action": "Check validation order", "expected": "Model validated before auth check", "observed": "Model validation happens before auth check (fix for VAL-ERROR-003)" },
+        { "action": "Test with unknown model", "expected": "Returns 400 for unknown model before auth check", "observed": "Returns 400 with model_not_found - auth not reached" }
+      ],
+      "evidence": {
+        "validationOrder": "Model validation -> Auth check",
+        "testModel": "nonexistent-model-xyz -> 400 (model_not_found)",
+        "issue": "With current validation order, testing 401 for missing auth requires sending a request with a KNOWN model while unauthenticated. Without authenticated cursor-agent, cannot determine which models are valid."
+      },
+      "issues": "Cannot test 401 response without a known-valid model. The fix for VAL-ERROR-003 changed validation order to check model before auth, which means unknown models return 400 before auth is even checked. To properly test VAL-PROXY-005, need an authenticated cursor-agent to know which models are valid, then test with invalid auth."
+    },
+    {
+      "id": "VAL-ERROR-002",
+      "title": "Quota exceeded is detected",
+      "status": "blocked",
+      "steps": [],
+      "evidence": {},
+      "issues": "Cannot test without triggering real API usage limits. Would require actual Cursor API quota consumption."
+    }
+  ],
+  "frictions": [],
+  "blockers": [
+    {
+      "description": "cursor-agent is not logged in, cannot test authenticated flows",
+      "affectedAssertions": ["VAL-AUTH-002", "VAL-PROXY-005"]
+    },
+    {
+      "description": "cursor-agent stores tokens internally, not in accessible files",
+      "affectedAssertions": ["VAL-AUTH-003"]
+    },
+    {
+      "description": "Cannot trigger real API quota errors without consuming actual API limits",
+      "affectedAssertions": ["VAL-ERROR-002"]
+    }
+  ],
+  "summary": "Verified fixes from round 2. VAL-ERROR-003 is now FIXED (returns 400 for unknown model). VAL-AUTH-002/003 fixes are correct - auth detection now uses `cursor-agent status` properly, but underlying architectural limitation remains (cursor-agent tokens not in files). VAL-PROXY-005 and VAL-ERROR-002 remain blocked due to environment constraints."
+}

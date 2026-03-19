@@ -1,11 +1,11 @@
 {
   "milestone": "foundation",
-  "round": 2,
+  "round": 3,
   "status": "fail",
   "assertionsSummary": {
     "total": 16,
-    "passed": 11,
-    "failed": 3,
+    "passed": 12,
+    "failed": 2,
     "blocked": 2
   },
   "passedAssertions": [
@@ -19,32 +19,41 @@
     "VAL-STREAM-004",
     "VAL-STREAM-005",
     "VAL-ERROR-001",
-    "VAL-AUTH-001"
+    "VAL-AUTH-001",
+    "VAL-ERROR-003"
   ],
   "failedAssertions": [
     {
-      "id": "VAL-ERROR-003",
-      "reason": "Request with unknown model 'nonexistent-model-xyz' returns HTTP 500 with 'Authentication required' error, not HTTP 400 with model not found error. The auth failure is occurring before model validation."
-    },
-    {
       "id": "VAL-AUTH-002",
-      "reason": "Proxy shows 'authenticated' in /health even when cursor-agent status shows 'Not logged in'. The auth detection fallback incorrectly returns true when cli-config.json exists, even though it contains no access token - only user settings."
+      "reason": "The fix correctly removed file-based fallback and now uses `cursor-agent status` for auth detection. /health correctly shows 'not_authenticated' when cursor-agent is not logged in. However, the underlying architectural issue remains: cursor-agent stores tokens internally and not in ~/.cursor/ files. Cannot verify authenticated case without logged-in cursor-agent."
     },
     {
       "id": "VAL-AUTH-003",
-      "reason": "cli-config.json does not contain an access token field - only user settings (permissions, editor, model, etc.). Token is stored internally by cursor-agent and not accessible to the proxy."
+      "reason": "cli-config.json does not contain an access token - only user settings (permissions, editor, model preferences). cursor-agent stores tokens internally, not in files accessible to the proxy. This is an architectural limitation that cannot be resolved - cursor-agent's auth mechanism does not expose tokens to external processes."
     }
   ],
   "blockedAssertions": [
     {
       "id": "VAL-ERROR-002",
-      "blockedBy": "Cannot test quota exceeded without triggering real API usage limits"
+      "blockedBy": "Cannot test quota exceeded without triggering real API usage limits. Would require actual Cursor API quota consumption."
     },
     {
       "id": "VAL-PROXY-005",
-      "blockedBy": "Cannot make cursor-agent unauthenticated without breaking test environment"
+      "blockedBy": "Cannot test 401 for missing auth because: (1) model validation now happens before auth check (fix for VAL-ERROR-003), (2) without authenticated cursor-agent, cannot determine which models are valid to test auth with a known model. Requires authenticated cursor-agent to establish valid model list."
     }
   ],
   "appliedUpdates": [],
+  "fixesVerified": [
+    {
+      "assertion": "VAL-ERROR-003",
+      "fixCommit": "a94c06b fix: validate model before auth check",
+      "status": "VERIFIED - now returns HTTP 400 for unknown model"
+    },
+    {
+      "assertion": "VAL-AUTH-002",
+      "fixCommit": "9caabeb fix: remove file-based fallback from verifyCursorAuth()",
+      "status": "FIX VERIFIED - auth detection now uses `cursor-agent status`. /health correctly shows 'not_authenticated' when not logged in. However, cannot verify authenticated case without logged-in cursor-agent."
+    }
+  ],
   "previousRound": ".factory/validation/foundation/user-testing/synthesis.json"
 }

@@ -1,80 +1,49 @@
-# User Testing Guide for CliCursorProxyAPI
+# User Testing Knowledge - CliCursorProxyAPI
 
-## Testing Surface: HTTP REST API (curl)
+## Testing Surface: cursor-proxy (standalone proxy server)
 
-All assertions in the foundation milestone are tested via HTTP requests to the proxy server.
+### URLs & Ports
+- Proxy server: `http://localhost:32124`
+- Health: `http://localhost:32124/health`
+- Models: `http://localhost:32124/v1/models`
+- Chat completions: `http://localhost:32124/v1/chat/completions`
 
-### Proxy URL
-- Base URL: `http://localhost:32124`
-- All endpoints accept JSON request/response
-
-### Testing Tool
-- **curl** - for all HTTP testing
-- No browser automation needed for foundation milestone
-- No terminal automation needed for foundation milestone
-
-### Test Commands
-
-#### Health Check
+### Service Management
 ```bash
-curl -s http://localhost:32124/health
-# Expected: {"status":"ok","version":"2.3.20","auth":"authenticated"}
+# Start
+cd /Users/thewindmom/Developer/01_Random_Coding/opencode-cursor && bun run proxy
+
+# Stop
+pkill -f "bun run proxy" || pkill -f "standalone-server" || true
+
+# Health check
+curl -sf http://localhost:32124/health
 ```
 
-#### List Models
-```bash
-curl -s http://localhost:32124/v1/models
-# Expected: JSON with object:"list" and data array of models
-```
+### Cursor-Agent Auth State
+- `cursor-agent status` returns "Not logged in" or "✓ Logged in as..."
+- `cursor-agent models` lists available models (requires auth)
+- `cursor-agent login` starts OAuth flow
 
-#### Chat Completions (Streaming)
-```bash
-curl -s -X POST http://localhost:32124/v1/chat/completions \
-  -H "Content-Type: application/json" \
-  -d '{"model":"auto","messages":[{"role":"user","content":"Say hello"}],"stream":true}'
-# Expected: SSE stream with data: {...}\n\n format, ends with data: [DONE]
-```
+**Important:** cursor-agent stores tokens internally, NOT in ~/.cursor/ files. The cli-config.json file only contains user settings (permissions, editor, model preferences) - NO access tokens.
 
-#### Error Cases
-```bash
-# Invalid JSON
-curl -s -X POST http://localhost:32124/v1/chat/completions \
-  -H "Content-Type: application/json" \
-  -d 'not valid json'
-# Expected: 400
+### Validation Concurrency
+- Max concurrent validators: 1 (single proxy server, shared cursor-agent process)
+- All assertions should be tested serially against the same proxy instance
 
-# Missing messages
-curl -s -X POST http://localhost:32124/v1/chat/completions \
-  -H "Content-Type: application/json" \
-  -d '{"model":"auto"}'
-# Expected: 400
+### Key Findings
+1. **Auth detection**: `verifyCursorAuth()` uses `cursor-agent status` command (not file-based). Returns true only when cursor-agent is logged in.
+2. **Model validation order**: Model validation happens BEFORE auth check. Unknown models return HTTP 400 before auth is checked.
+3. **cli-config.json**: Does NOT contain access tokens - only user settings.
+4. **cursor-agent internal storage**: Tokens stored internally by cursor-agent, not accessible to proxy.
 
-# Unknown model
-curl -s -X POST http://localhost:32124/v1/chat/completions \
-  -H "Content-Type: application/json" \
-  -d '{"model":"nonexistent-model","messages":[{"role":"user","content":"hi"}]}'
-# Expected: 400
-```
+### Blocked Assertions
+- **VAL-PROXY-005**: Cannot test 401 for missing auth without a known-valid model (requires authenticated cursor-agent to establish valid model list)
+- **VAL-ERROR-002**: Cannot trigger quota exceeded without real API usage
+- **VAL-AUTH-003**: Architectural limitation - cursor-agent tokens not in files
 
-## Validation Concurrency
-
-**Max concurrent validators**: 3
-
-The proxy is a stateless HTTP server. Multiple curl requests can run concurrently against different endpoints without interference. The only shared state is the cursor-agent subprocess which handles its own concurrency.
-
-## Flow Validator Guidance: HTTP API
-
-### Isolation Rules
-- Each flow validator tests assertions independently
-- No shared state between validators
-- cursor-agent handles authentication internally (no conflict)
-- Safe to run up to 3 validators concurrently
-
-### What to Avoid
-- Do not run multiple streaming chat requests simultaneously on the same validator (hard to parse)
-- Each assertion group should run its tests sequentially within the subagent
-
-### Evidence Collection
-- Save raw curl output to evidence files
-- Capture HTTP status codes
-- For streaming, capture first 5 lines and last 3 lines
+### Testing Without Auth
+The proxy can still be tested without cursor-agent auth:
+- `/health` returns auth status
+- `/v1/models` returns empty list (or limited models)
+- Unknown model requests return 400 with model_not_found error
