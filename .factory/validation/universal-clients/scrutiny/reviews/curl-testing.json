@@ -1,0 +1,49 @@
+{
+  "featureId": "curl-testing",
+  "reviewedAt": "2026-03-19T22:06:00.000Z",
+  "commitId": "e81ff85a256ecb7f3d830c30ed999bf7e54f13b1",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "pass",
+  "codeReview": {
+    "summary": "The curl-testing feature verified that all proxy endpoints respond correctly to standard curl commands. The worker started the proxy, ran curl commands against /health, /v1/models, and /v1/chat/completions endpoints, and confirmed proper HTTP status codes and JSON responses. However, the commit referenced in the handoff (e81ff85) is for 'Add Factory Droid integration guide' - a documentation file - not any curl-related code. Since curl-testing is a verification feature (no implementation required), the actual verification work is only documented in the handoff/transcript, not in git history.",
+    "issues": [
+      {
+        "file": "N/A - verification only",
+        "line": null,
+        "severity": "non_blocking",
+        "description": "Commit e81ff85 contains 'docs: Add Factory Droid integration guide' (355 lines to docs/FACTORY-DROID.md), not curl-testing code. The curl-testing feature verification is not represented in git history. This is acceptable since curl-testing is a verification task with no code changes needed, but it creates a traceability gap."
+      },
+      {
+        "file": "N/A - endpoint behavior",
+        "line": null,
+        "severity": "suggestion",
+        "description": "VAL-CLIENT-003 states '/v1/models returns models before auth check', but the endpoint returned empty data ({'object':'list','data':[]}) when cursor-agent is not authenticated. The worker classified this as non-blocking but did not flag it as potentially contradicting VAL-CLIENT-003. The 400 error on /v1/chat/completions is expected behavior (auth required), not an endpoint failure."
+      }
+    ]
+  },
+  "sharedStateObservations": [
+    {
+      "area": "conventions",
+      "observation": "The handoff references commit e81ff85 for curl-testing, but that commit is for Factory Droid integration docs. There's no git trail for the curl-testing feature itself. While this is acceptable for verification-only features, AGENTS.md does not document that verification features may not have associated code commits.",
+      "evidence": "Commit e81ff85 stat shows only docs/FACTORY-DROID.md changed. curl-testing feature has no code files modified."
+    },
+    {
+      "area": "skills",
+      "observation": "Worker followed the worker skill procedure correctly (read mission context, start proxy, run curl commands, verify responses, stop proxy). skillFeedback confirms followedProcedure: true with no deviations.",
+      "evidence": "Transcript shows: Read mission.md, AGENTS.md, services.yaml. Started proxy with 'bun run proxy', ran curl commands, stopped with pkill."
+    },
+    {
+      "area": "services",
+      "observation": "Worker correctly used services from .factory/services.yaml - started proxy via 'bun run proxy' which matches the services.yaml definition. No undocumented services or commands were used.",
+      "evidence": "services.yaml defines cursor-proxy with start: 'cd .../opencode-cursor && bun run proxy'. Worker used this same command."
+    },
+    {
+      "area": "knowledge",
+      "observation": "Worker discovered that /v1/chat/completions returns 400 with 'Unknown model: auto' when cursor-agent is not authenticated. This is expected behavior but was not previously documented. The VAL-CLIENT-003 requirement states models should be accessible without auth, but the actual behavior shows empty model list - this discrepancy could be added to library/environment.md.",
+      "evidence": "Transcript shows curl to /v1/models returned empty data array. Worker noted 'cursor-agent not authenticated' in health response."
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "curl-testing verification passed. Worker correctly verified all three endpoints respond to curl: /health (200), /v1/models (200 with JSON), /v1/chat/completions (400 with proper error JSON). VAL-CLIENT-002 is satisfied. The 400 on chat completions is expected (auth required). The commit referenced (e81ff85) is unrelated documentation, which is acceptable for verification-only features but creates a traceability gap. No blocking issues found."
+}
