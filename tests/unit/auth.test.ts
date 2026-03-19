@@ -43,6 +43,8 @@ describe("Auth Module", () => {
     process.env.HOME = testHome;
     process.env.XDG_CONFIG_HOME = join(testHome, ".config");
     process.env.CURSOR_ACP_HOME_DIR = testHome;
+    // Use a short timeout for tests to avoid slow cursor-agent status calls
+    process.env.CURSOR_ACP_AUTH_CHECK_TIMEOUT = "100";
     cleanupAuthFiles();
   });
 
@@ -97,12 +99,12 @@ describe("Auth Module", () => {
   });
 
   describe("verifyCursorAuth", () => {
-    it("should return false when auth file does not exist", () => {
+    it("should return false when not authenticated", () => {
       const result = verifyCursorAuth();
       expect(result).toBe(false);
     });
 
-    it("should return true when auth file exists", () => {
+    it("should return true when auth file exists (fallback)", () => {
       const paths = authPaths();
       if (!existsSync(paths.testAuthDir)) {
         mkdirSync(paths.testAuthDir, { recursive: true });
@@ -113,7 +115,7 @@ describe("Auth Module", () => {
       expect(result).toBe(true);
     });
 
-    it("should return true when cli-config.json exists", () => {
+    it("should return true when cli-config.json exists (fallback)", () => {
       const paths = authPaths();
       if (!existsSync(paths.testCliConfigDir)) {
         mkdirSync(paths.testCliConfigDir, { recursive: true });

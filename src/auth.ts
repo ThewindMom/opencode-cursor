@@ -1,6 +1,6 @@
 // src/auth.ts
 
-import { spawn } from "child_process";
+import { spawn, spawnSync } from "child_process";
 import { existsSync } from "fs";
 import { homedir, platform } from "os";
 import { join } from "path";
@@ -202,17 +202,64 @@ export async function startCursorOAuth(): Promise<{
   });
 }
 
+/**
+ * Check if cursor-agent is authenticated by running `cursor-agent status`.
+ * Returns true if logged in, false otherwise.
+ */
+function checkCursorAgentStatus(): boolean {
+  try {
+    // Allow timeout to be configured via environment variable (useful for testing)
+    const timeout = parseInt(process.env.CURSOR_ACP_AUTH_CHECK_TIMEOUT || "5000", 10);
+    
+    const result = spawnSync("cursor-agent", ["status"], {
+      stdio: ["pipe", "pipe", "pipe"],
+      timeout: timeout,
+    });
+
+    const stdout = result.stdout?.toString() || "";
+    const exitCode = result.status || -1;
+
+    // Strip ANSI codes for analysis
+    const cleanOutput = stripAnsi(stdout);
+    
+    // Check for successful login indicator
+    // When logged in: "✓ Logged in as <email>"
+    // When logged out: "Not logged in" or starts login process
+    const isLoggedIn = cleanOutput.includes("✓ Logged in") || 
+                        cleanOutput.includes("Logged in as");
+    
+    log.debug("cursor-agent status check", { 
+      exitCode, 
+      isLoggedIn,
+      outputPreview: cleanOutput.substring(0, 100) 
+    });
+
+    return isLoggedIn && exitCode === 0;
+  } catch (error) {
+    log.debug("cursor-agent status check failed", { error: String(error) });
+    return false;
+  }
+}
+
 export function verifyCursorAuth(): boolean {
+  // First try using cursor-agent status (the correct way)
+  const agentAuth = checkCursorAgentStatus();
+  if (agentAuth) {
+    return true;
+  }
+  
+  // Fallback: check for auth files (legacy behavior for backward compatibility)
+  // This handles edge cases where cursor-agent status fails but auth files exist
   const possiblePaths = getPossibleAuthPaths();
   
   for (const authPath of possiblePaths) {
     if (existsSync(authPath)) {
-      log.debug("Auth file found", { path: authPath });
+      log.debug("Auth file found (fallback)", { path: authPath });
       return true;
     }
   }
   
-  log.debug("No auth file found", { checkedPaths: possiblePaths });
+  log.debug("No auth file found (fallback)", { checkedPaths: possiblePaths });
   return false;
 }
 
