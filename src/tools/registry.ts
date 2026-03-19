@@ -1,14 +1,14 @@
-import type { ToolDefinition, ToolExecutor } from "./types.js";
+import type { ToolDefinition, ToolHandler } from "./types.js";
 
 interface RegisteredTool {
   definition: ToolDefinition;
-  executor: ToolExecutor;
+  executor: ToolHandler;
 }
 
 export class ToolRegistry {
   private tools: Map<string, RegisteredTool> = new Map();
 
-  register(name: string, definition: ToolDefinition, executor: ToolExecutor): void {
+  register(name: string, definition: ToolDefinition, executor: ToolHandler): void {
     this.tools.set(name, { definition, executor });
   }
 
@@ -20,7 +20,7 @@ export class ToolRegistry {
     return Array.from(this.tools.values()).map(t => t.definition);
   }
 
-  getExecutor(name: string): ToolExecutor | undefined {
+  getExecutor(name: string): ToolHandler | undefined {
     return this.tools.get(name)?.executor;
   }
 

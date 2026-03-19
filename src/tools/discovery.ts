@@ -44,7 +44,8 @@ export class OpenCodeToolDiscovery {
     if (this.executorPref !== "cli" && this.client?.tool?.list) {
       try {
         const resp: ToolListResponse = await this.client.tool.list({});
-        const rawTools = Array.isArray(resp?.data) ? resp.data : (resp?.data as any)?.tools || [];
+        // ToolListResponse is ToolListItem[] (an array), not an object with data property
+        const rawTools = Array.isArray(resp) ? resp : [];
         tools = rawTools.map((t: any) => this.normalize(t, "sdk"));
 
         // Merge MCP tools if available on client (best-effort)

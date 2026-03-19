@@ -45,7 +45,7 @@ import {
 } from "./provider/boundary.js";
 import { handleToolLoopEventWithFallback } from "./provider/runtime-interception.js";
 import { PassThroughTracker } from "./provider/passthrough-tracker.js";
-import { toastService } from "./services/toast-service.js";
+import { toastService, type OpenCodeClientWithTui } from "./services/toast-service.js";
 import { buildToolSchemaMap } from "./provider/tool-schema-compat.js";
 import {
   createToolLoopGuard,
@@ -523,9 +523,10 @@ async function findFirstAllowedToolCallInOutput(
     });
 
     if (result.terminate) {
+      const isSilent = result.terminate.reason === "loop_guard" && result.terminate.silent;
       return {
         toolCall: null,
-        terminationMessage: result.terminate.silent ? null : result.terminate.message,
+        terminationMessage: isSilent ? null : result.terminate.message,
       };
     }
     if (result.intercepted && interceptedToolCall) {
@@ -732,7 +733,7 @@ async function ensureCursorProxyServer(workspaceDirectory: string, toolRouter?: 
           });
           const payload = boundaryContext.run(
             "createNonStreamToolCallResponse",
-            (boundary) => boundary.createNonStreamToolCallResponse(meta, intercepted.toolCall),
+            (boundary) => boundary.createNonStreamToolCallResponse(meta, intercepted.toolCall!),
           );
           return new Response(JSON.stringify(payload), {
             status: 200,
@@ -873,7 +874,8 @@ async function ensureCursorProxyServer(workspaceDirectory: string, toolRouter?: 
                     },
                   });
                   if (result.terminate) {
-                    if (!result.terminate.silent) {
+                    const isSilent = result.terminate.reason === "loop_guard" && result.terminate.silent;
+                    if (!isSilent) {
                       emitTerminalAssistantErrorAndTerminate(result.terminate.message);
                     } else {
                       // Silent termination: just end the stream without an error message
@@ -938,7 +940,8 @@ async function ensureCursorProxyServer(workspaceDirectory: string, toolRouter?: 
                   },
                 });
                 if (result.terminate) {
-                  if (!result.terminate.silent) {
+                  const isSilent = result.terminate.reason === "loop_guard" && result.terminate.silent;
+                  if (!isSilent) {
                     emitTerminalAssistantErrorAndTerminate(result.terminate.message);
                   } else {
                     controller.enqueue(encoder.encode(formatSseDone()));
@@ -1192,7 +1195,7 @@ async function ensureCursorProxyServer(workspaceDirectory: string, toolRouter?: 
             });
             const payload = boundaryContext.run(
               "createNonStreamToolCallResponse",
-              (boundary) => boundary.createNonStreamToolCallResponse(meta, intercepted.toolCall),
+              (boundary) => boundary.createNonStreamToolCallResponse(meta, intercepted.toolCall!),
             );
             res.writeHead(200, { "Content-Type": "application/json" });
             res.end(JSON.stringify(payload));
@@ -1356,7 +1359,8 @@ async function ensureCursorProxyServer(workspaceDirectory: string, toolRouter?: 
                 },
               });
               if (result.terminate) {
-                if (!result.terminate.silent) {
+                const isSilent = result.terminate.reason === "loop_guard" && result.terminate.silent;
+                if (!isSilent) {
                   emitTerminalAssistantErrorAndTerminate(result.terminate.message);
                 } else {
                   // Silent termination: just end the stream without an error message
@@ -1427,7 +1431,8 @@ async function ensureCursorProxyServer(workspaceDirectory: string, toolRouter?: 
                 },
               });
               if (result.terminate) {
-                if (!result.terminate.silent) {
+                const isSilent = result.terminate.reason === "loop_guard" && result.terminate.silent;
+                if (!isSilent) {
                   emitTerminalAssistantErrorAndTerminate(result.terminate.message);
                 } else {
                   // Silent termination: just end the stream without an error message
@@ -1594,7 +1599,7 @@ function jsonSchemaToZod(jsonSchema: any): any {
         }
         break;
       case "object":
-        zodType = z.record(z.any());
+        zodType = z.record(z.string(), z.any());
         if (p.description) {
           zodType = zodType.describe(p.description);
         }
@@ -1850,7 +1855,7 @@ export const CursorPlugin: Plugin = async ({ $, directory, worktree, client, ser
   }
 
   // Initialize toast service for MCP pass-through notifications
-  toastService.setClient(client);
+  toastService.setClient(client as unknown as OpenCodeClientWithTui);
 
   // Tools (skills) discovery/execution wiring
   const toolsEnabled = process.env.CURSOR_ACP_ENABLE_OPENCODE_TOOLS !== "false"; // default ON
@@ -1965,7 +1970,7 @@ export const CursorPlugin: Plugin = async ({ $, directory, worktree, client, ser
     return toolEntries;
   }
 
-  const proxyBaseURL = await ensureCursorProxyServer(workspaceDirectory, router);
+  const proxyBaseURL = await ensureCursorProxyServer(workspaceDirectory, router ?? undefined);
   log.debug("Proxy server started", { baseURL: proxyBaseURL });
 
   // Build tool hook entries from local registry
@@ -1991,7 +1996,7 @@ export const CursorPlugin: Plugin = async ({ $, directory, worktree, client, ser
                 url,
                 instructions,
                 method: "auto" as const,
-                callback,
+                callback: callback as any,
               };
             } catch (error) {
               log.error("OAuth error", { error });
@@ -2000,7 +2005,7 @@ export const CursorPlugin: Plugin = async ({ $, directory, worktree, client, ser
           },
         },
       ],
-    },
+    } as any,
 
     async "chat.params"(input: any, output: any) {
       const boundaryContext = createBoundaryRuntimeContext("chat.params");

@@ -35,10 +35,22 @@ async function loadDefaultDeps(): Promise<McpClientManagerDeps> {
       new Client({ name: "open-cursor", version: "1.0.0" }, { capabilities: {} }),
     createTransport: (config: McpServerConfig) => {
       if (config.type === "local") {
+        // Filter out undefined values from process.env to satisfy Record<string, string>
+        const env: Record<string, string> = {};
+        for (const [key, value] of Object.entries(process.env)) {
+          if (value !== undefined) {
+            env[key] = value;
+          }
+        }
+        if (config.environment) {
+          for (const [key, value] of Object.entries(config.environment)) {
+            env[key] = value;
+          }
+        }
         return new StdioClientTransport({
           command: config.command[0],
           args: config.command.slice(1),
-          env: { ...process.env, ...(config.environment ?? {}) },
+          env,
           stderr: "pipe",
         });
       }

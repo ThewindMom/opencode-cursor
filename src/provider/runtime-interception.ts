@@ -532,7 +532,7 @@ export async function handleToolLoopEventWithFallback(
 function evaluateToolLoopGuard(
   toolLoopGuard: ToolLoopGuard,
   toolCall: OpenAiToolCall,
-): ToolLoopTermination | null {
+): ToolLoopGuardTermination | null {
   const decision = toolLoopGuard.evaluate(toolCall);
   if (!decision.tracked) {
     return null;
@@ -618,7 +618,7 @@ function evaluateSchemaValidationLoopGuard(
   toolLoopGuard: ToolLoopGuard,
   toolCall: OpenAiToolCall,
   validation: ToolSchemaValidationResult,
-): ToolLoopTermination | null {
+): ToolLoopGuardTermination | null {
   const validationSignature = buildValidationSignature(validation);
   const decision = toolLoopGuard.evaluateValidation(toolCall, validationSignature);
   if (!decision.tracked || !decision.triggered) {

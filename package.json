@@ -7,6 +7,7 @@
   "module": "src/plugin-entry.ts",
   "scripts": {
     "build": "bun build ./src/index.ts ./src/plugin-entry.ts ./src/cli/discover.ts ./src/cli/opencode-cursor.ts ./src/cli/mcptool.ts ./src/proxy/standalone-server.ts --outdir ./dist --target node --external @opencode-ai/plugin --external zod",
+    "typecheck": "tsc --noEmit",
     "dev": "bun build ./src/index.ts ./src/plugin-entry.ts ./src/cli/discover.ts ./src/cli/opencode-cursor.ts ./src/cli/mcptool.ts ./src/proxy/standalone-server.ts --outdir ./dist --target node --watch --external @opencode-ai/plugin --external zod",
     "proxy": "bun run src/proxy/standalone-server.ts",
     "proxy:build": "bun build ./src/proxy/standalone-server.ts --outdir ./dist --target node",

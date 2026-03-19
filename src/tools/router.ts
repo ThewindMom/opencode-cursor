@@ -39,8 +39,8 @@ export class ToolRouter {
 
   async handleToolCall(event: ToolCallEvent, meta: { id: string; created: number; model: string }): Promise<ToolResultChunk | null> {
     const callId = event.call_id || event.tool_call_id || "unknown";
-    let name = event.name || this.inferName(event);
-    if (!this.isOpenCodeTool(name)) return null;
+    let name: string | undefined = event.name || this.inferName(event);
+    if (!name || !this.isOpenCodeTool(name)) return null;
 
     // Resolve aliases via SkillResolver if configured
     if (this.ctx.resolveName) {
